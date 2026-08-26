@@ -31,6 +31,9 @@
                 <i class="bi bi-question-circle"></i> 使用说明
             </a>
         </nav>
+        <div class="p-3 text-muted small mt-auto border-top border-secondary border-opacity-25">
+            <span class="badge bg-secondary-subtle text-secondary">v<?= e(APP_VERSION) ?></span>
+        </div>
     </aside>
 
     <div class="main-area">

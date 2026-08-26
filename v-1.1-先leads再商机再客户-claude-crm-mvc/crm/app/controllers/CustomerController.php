@@ -80,6 +80,7 @@ class CustomerController extends Controller
         if (!$customer) {
             $this->setFlash('error', '客户不存在。');
             $this->redirect('/customers');
+            return;
         }
 
         $this->view('customers/edit', ['customer' => $customer, 'csrf' => $this->csrfToken(), 'errors' => []]);
@@ -89,6 +90,14 @@ class CustomerController extends Controller
     {
         $this->requireAuth();
         $this->verifyCsrf();
+
+        $customerModel = $this->model('Customer');
+        $customer = $customerModel->find((int) $id);
+        if (!$customer) {
+            $this->setFlash('error', '客户不存在。');
+            $this->redirect('/customers');
+            return;
+        }
 
         [$data, $errors] = $this->validate($_POST);
 
@@ -101,7 +110,7 @@ class CustomerController extends Controller
             return;
         }
 
-        $this->model('Customer')->update((int) $id, $data);
+        $customerModel->update((int) $id, $data);
         $this->setFlash('success', '客户已更新。');
         $this->redirect('/customers/' . $id);
     }
@@ -111,6 +120,14 @@ class CustomerController extends Controller
         $this->requireAuth();
 
         $customerId = (int) $id;
+        $customerModel = $this->model('Customer');
+        $customer = $customerModel->find($customerId);
+
+        if (!$customer) {
+            $this->setFlash('error', '客户不存在。');
+            $this->redirect('/customers');
+            return;
+        }
 
         // Delete leads that were converted to create this customer
         $leadModel = $this->model('Lead');
@@ -124,7 +141,7 @@ class CustomerController extends Controller
             $dealModel->delete((int) $deal['id']);
         }
 
-        $this->model('Customer')->delete($customerId);
+        $customerModel->delete($customerId);
         $this->setFlash('success', '客户及关联的线索、商机已删除。');
         $this->redirect('/customers');
     }
@@ -133,6 +150,13 @@ class CustomerController extends Controller
     {
         $this->requireAuth();
         $this->verifyCsrf();
+
+        $customer = $this->model('Customer')->find((int) $id);
+        if (!$customer) {
+            $this->setFlash('error', '客户不存在。');
+            $this->redirect('/customers');
+            return;
+        }
 
         $note = trim($_POST['description'] ?? '');
         if ($note !== '') {
@@ -146,6 +170,13 @@ class CustomerController extends Controller
     {
         $this->requireAuth();
         $this->verifyCsrf();
+
+        $customer = $this->model('Customer')->find((int) $id);
+        if (!$customer) {
+            $this->setFlash('error', '客户不存在。');
+            $this->redirect('/customers');
+            return;
+        }
 
         $title = trim($_POST['title'] ?? '');
         if ($title !== '') {

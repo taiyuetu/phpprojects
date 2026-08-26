@@ -87,6 +87,28 @@ abstract class Controller
         }
     }
 
+    /** Require user to have specific role */
+    protected function requireRole(string $role, string $fallbackUrl = '/'): void
+    {
+        $this->requireAuth();
+        if (($_SESSION['user']['role'] ?? '') !== $role) {
+            $this->setFlash('error', '您没有执行该操作的权限。');
+            $this->redirect($fallbackUrl);
+        }
+    }
+
+    /** Ensure current user is admin or the resource owner */
+    protected function authorizeResource(?int $ownerId, string $fallbackUrl = '/'): bool
+    {
+        $this->requireAuth();
+        if (!canManageResource($ownerId)) {
+            $this->setFlash('error', '您没有权限操作此数据。');
+            $this->redirect($fallbackUrl);
+            return false;
+        }
+        return true;
+    }
+
     /** Basic CSRF token helpers. */
     protected function csrfToken(): string
     {

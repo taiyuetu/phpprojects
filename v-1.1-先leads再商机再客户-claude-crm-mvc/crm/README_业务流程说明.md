@@ -88,16 +88,12 @@
 已流失线索 → 点击"重新激活" → 线索状态恢复为contacted → 可继续跟进或转商机
 ```
 
-## 数据库迁移
+## 数据库导入
 
-执行以下SQL迁移文件：
+直接导入完整的数据库结构与初始数据：
 
 ```bash
-# 1. 添加客户详情页功能（跟进记录表、leads关联客户）
-mysql -u root -p < database/migrate_customer_detail.sql
-
-# 2. 添加线索流失原因字段
-mysql -u root -p < database/migrate_lead_lost_reason.sql
+mysql -u root -p < database/schema.sql
 ```
 
 ## 文件清单

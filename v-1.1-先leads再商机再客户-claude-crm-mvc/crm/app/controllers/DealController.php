@@ -62,6 +62,7 @@ class DealController extends Controller
         if (!$deal) {
             $this->setFlash('error', '商机不存在。');
             $this->redirect('/deals');
+            return;
         }
 
         $this->view('deals/edit', [
@@ -77,6 +78,14 @@ class DealController extends Controller
         $this->requireAuth();
         $this->verifyCsrf();
 
+        $dealModel = $this->model('Deal');
+        $oldDeal = $dealModel->find((int) $id);
+        if (!$oldDeal) {
+            $this->setFlash('error', '商机不存在。');
+            $this->redirect('/deals');
+            return;
+        }
+
         [$data, $errors] = $this->validate($_POST);
 
         if ($errors) {
@@ -90,13 +99,12 @@ class DealController extends Controller
         }
 
         // Auto-record stage transition time
-        $oldDeal = $this->model('Deal')->find((int) $id);
-        if ($oldDeal && $oldDeal['stage'] !== $data['stage']) {
+        if ($oldDeal['stage'] !== $data['stage']) {
             $stageCol = 'stage_' . $data['stage'] . '_at';
             $data[$stageCol] = date('Y-m-d H:i:s');
         }
 
-        $this->model('Deal')->update((int) $id, $data);
+        $dealModel->update((int) $id, $data);
         $this->setFlash('success', '商机已更新。');
         $this->redirect('/deals');
     }
@@ -104,7 +112,16 @@ class DealController extends Controller
     public function destroy(string $id): void
     {
         $this->requireAuth();
-        $this->model('Deal')->delete((int) $id);
+
+        $dealModel = $this->model('Deal');
+        $deal = $dealModel->find((int) $id);
+        if (!$deal) {
+            $this->setFlash('error', '商机不存在。');
+            $this->redirect('/deals');
+            return;
+        }
+
+        $dealModel->delete((int) $id);
         $this->setFlash('success', '商机已删除。');
         $this->redirect('/deals');
     }

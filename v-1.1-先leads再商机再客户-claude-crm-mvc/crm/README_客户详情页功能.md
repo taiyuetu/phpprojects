@@ -26,17 +26,13 @@
 ### 4. 活动记录（Activities）
 - 记录电话、会议、备注等一般活动
 
-## 数据库迁移
+## 数据库配置
 
-执行以下SQL迁移文件来添加新功能：
+已统一整合至 `database/schema.sql`，执行导入即可：
 
 ```bash
-mysql -u root -p < database/migrate_customer_detail.sql
+mysql -u root -p < database/schema.sql
 ```
-
-迁移内容：
-1. 在 `leads` 表中添加 `customer_id` 字段，用于关联客户
-2. 创建 `follow_ups` 表，用于记录跟进信息
 
 ## 文件变更
 

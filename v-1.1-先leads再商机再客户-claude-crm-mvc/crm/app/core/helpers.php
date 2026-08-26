@@ -31,12 +31,52 @@ function flash(string $key): ?string
 /** Currently logged-in user's array, or null. */
 function currentUser(): ?array
 {
+    if (empty($_SESSION['user_id'])) {
+        return null;
+    }
+    // Auto sync user session from DB if role is missing
+    if (empty($_SESSION['user']) || empty($_SESSION['user']['role'])) {
+        try {
+            $db = Database::connection();
+            $stmt = $db->prepare("SELECT id, name, email, role FROM users WHERE id = :id");
+            $stmt->execute([':id' => (int) $_SESSION['user_id']]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($user) {
+                $_SESSION['user'] = $user;
+            }
+        } catch (Throwable $e) {
+            // ignore
+        }
+    }
     return $_SESSION['user'] ?? null;
 }
 
 function isLoggedIn(): bool
 {
     return !empty($_SESSION['user_id']);
+}
+
+/** Check if currently logged in user is admin */
+function isAdmin(): bool
+{
+    $user = currentUser();
+    return ($user['role'] ?? '') === 'admin';
+}
+
+/** Check if currently logged in user can manage a specific resource (owner or admin, or unassigned) */
+function canManageResource(?int $ownerId): bool
+{
+    if (!isLoggedIn()) {
+        return false;
+    }
+    if (isAdmin()) {
+        return true;
+    }
+    // If unassigned (public/null), all sales reps can view/edit/claim
+    if ($ownerId === null || $ownerId === 0) {
+        return true;
+    }
+    return (int) $ownerId === (int) ($_SESSION['user_id'] ?? 0);
 }
 
 /** Format a number as currency. */

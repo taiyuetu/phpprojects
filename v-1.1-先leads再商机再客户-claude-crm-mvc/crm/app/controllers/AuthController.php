@@ -14,12 +14,24 @@ class AuthController extends Controller
     {
         $this->verifyCsrf();
 
+        // Check login throttling
+        $throttle = $_SESSION['login_throttle'] ?? ['attempts' => 0, 'locked_until' => 0];
+        if (!empty($throttle['locked_until']) && $throttle['locked_until'] > time()) {
+            $remaining = $throttle['locked_until'] - time();
+            $this->view('auth/login', [
+                'csrf'   => $this->csrfToken(),
+                'errors' => ["尝试登录失败次数过多，已被临时锁定，请 {$remaining} 秒后再试。"],
+                'old'    => ['email' => trim($_POST['email'] ?? '')],
+            ], 'auth');
+            return;
+        }
+
         $email = trim($_POST['email'] ?? '');
         $password = $_POST['password'] ?? '';
 
         $errors = [];
         if ($email === '' || $password === '') {
-            $errors[] = 'Email and password are required.';
+            $errors[] = '请输入邮箱和密码。';
         }
 
         if (!$errors) {
@@ -27,6 +39,9 @@ class AuthController extends Controller
             $user = $userModel->findByEmail($email);
 
             if ($user && $userModel->verifyPassword($password, $user['password'])) {
+                // Clear throttling upon successful login
+                unset($_SESSION['login_throttle']);
+
                 session_regenerate_id(true);
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['user'] = [
@@ -39,7 +54,21 @@ class AuthController extends Controller
                 $this->redirect('/');
             }
 
-            $errors[] = '邮箱或密码不正确。';
+            // Track failed attempts
+            $attempts = ($throttle['attempts'] ?? 0) + 1;
+            if ($attempts >= 5) {
+                $_SESSION['login_throttle'] = [
+                    'attempts'     => 0,
+                    'locked_until' => time() + 60, // lock for 60 seconds
+                ];
+                $errors[] = '连续登录失败 5 次，账号登录已被临时锁定 60 秒。';
+            } else {
+                $_SESSION['login_throttle'] = [
+                    'attempts'     => $attempts,
+                    'locked_until' => 0,
+                ];
+                $errors[] = '邮箱或密码不正确。（剩余重试次数：' . (5 - $attempts) . ' 次）';
+            }
         }
 
         $this->view('auth/login', [
