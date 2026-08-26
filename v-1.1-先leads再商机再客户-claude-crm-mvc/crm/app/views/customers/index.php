@@ -56,3 +56,10 @@
         </table>
     </div>
 </div>
+
+<?php
+$baseUrl = url('/customers?page=') . ($search ? '&q=' . urlencode($search) : '');
+// Clean up: if no search, just /customers?page=
+if (!$search) $baseUrl = url('/customers?page=');
+include APP_PATH . '/views/partials/_pagination.php';
+?>

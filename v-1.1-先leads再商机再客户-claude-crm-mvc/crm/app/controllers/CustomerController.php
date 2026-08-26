@@ -7,11 +7,20 @@ class CustomerController extends Controller
         $this->requireAuth();
 
         $search = trim($_GET['q'] ?? '');
-        $customers = $this->model('Customer')->allWithOwner($search);
+        $page = max(1, (int) ($_GET['page'] ?? 1));
+        $perPage = 15;
+
+        $customerModel = $this->model('Customer');
+        $total = $customerModel->countWithOwner($search);
+        $totalPages = max(1, (int) ceil($total / $perPage));
+        $page = min($page, $totalPages);
 
         $this->view('customers/index', [
-            'customers' => $customers,
-            'search' => $search,
+            'customers'  => $customerModel->allWithOwner($search, $page, $perPage),
+            'search'     => $search,
+            'page'       => $page,
+            'totalPages' => $totalPages,
+            'total'      => $total,
         ]);
     }
 
@@ -100,8 +109,23 @@ class CustomerController extends Controller
     public function destroy(string $id): void
     {
         $this->requireAuth();
-        $this->model('Customer')->delete((int) $id);
-        $this->setFlash('success', '客户已删除。');
+
+        $customerId = (int) $id;
+
+        // Delete leads that were converted to create this customer
+        $leadModel = $this->model('Lead');
+        foreach ($leadModel->where('customer_id', $customerId) as $lead) {
+            $leadModel->delete((int) $lead['id']);
+        }
+
+        // Delete deals (CASCADE would handle this, but be explicit)
+        $dealModel = $this->model('Deal');
+        foreach ($dealModel->where('customer_id', $customerId) as $deal) {
+            $dealModel->delete((int) $deal['id']);
+        }
+
+        $this->model('Customer')->delete($customerId);
+        $this->setFlash('success', '客户及关联的线索、商机已删除。');
         $this->redirect('/customers');
     }
 

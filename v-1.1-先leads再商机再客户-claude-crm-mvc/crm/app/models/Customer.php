@@ -5,7 +5,7 @@ class Customer extends Model
     protected string $table = 'customers';
 
     /** All customers with their owner's name, newest first, optional search. */
-    public function allWithOwner(string $search = ''): array
+    public function allWithOwner(string $search = '', int $page = 1, int $perPage = 15): array
     {
         $sql = "SELECT c.*, u.name AS owner_name
                 FROM customers c
@@ -13,17 +13,43 @@ class Customer extends Model
         $params = [];
 
         if ($search !== '') {
-            $sql .= " WHERE c.name LIKE :search OR c.company LIKE :search OR c.email LIKE :search";
-            $params[':search'] = '%' . $search . '%';
+            $sql .= " WHERE c.name LIKE :search_name OR c.company LIKE :search_company OR c.email LIKE :search_email";
+            $searchVal = '%' . $search . '%';
+            $params[':search_name'] = $searchVal;
+            $params[':search_company'] = $searchVal;
+            $params[':search_email'] = $searchVal;
         }
 
-        $sql .= " ORDER BY c.created_at DESC";
+        $sql .= " ORDER BY c.created_at DESC LIMIT :limit OFFSET :offset";
 
         $stmt = $this->db()->query($sql);
         foreach ($params as $key => $value) {
             $stmt->bind($key, $value);
         }
+        $stmt->bind(':limit', $perPage, PDO::PARAM_INT);
+        $stmt->bind(':offset', ($page - 1) * $perPage, PDO::PARAM_INT);
         return $stmt->resultSet();
+    }
+
+    /** Count customers matching optional search. */
+    public function countWithOwner(string $search = ''): int
+    {
+        $sql = "SELECT COUNT(*) AS total FROM customers c";
+        $params = [];
+
+        if ($search !== '') {
+            $sql .= " WHERE c.name LIKE :search_name OR c.company LIKE :search_company OR c.email LIKE :search_email";
+            $searchVal = '%' . $search . '%';
+            $params[':search_name'] = $searchVal;
+            $params[':search_company'] = $searchVal;
+            $params[':search_email'] = $searchVal;
+        }
+
+        $stmt = $this->db()->query($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bind($key, $value);
+        }
+        return (int) ($stmt->single()['total'] ?? 0);
     }
 
     public function findWithOwner(int $id)

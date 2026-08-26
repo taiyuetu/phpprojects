@@ -8,6 +8,9 @@
 define('APP_PATH', __DIR__);
 define('BASE_PATH', dirname(__DIR__));
 
+// Set timezone to Asia/Shanghai (UTC+8)
+date_default_timezone_set('Asia/Shanghai');
+
 require APP_PATH . '/config/config.php';
 
 // ---- Detect URL_ROOT (the sub-path the app is served from) ----

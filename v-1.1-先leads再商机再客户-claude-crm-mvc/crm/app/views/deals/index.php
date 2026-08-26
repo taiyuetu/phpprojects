@@ -44,6 +44,11 @@ $columns = [
                         <?php if (!empty($d['close_date'])): ?>
                             <div class="small text-muted mt-1">预计成交：<?= formatDate($d['close_date']) ?></div>
                         <?php endif; ?>
+                        <?php
+                        $stageTimeCol = 'stage_' . $d['stage'] . '_at';
+                        if (!empty($d[$stageTimeCol])): ?>
+                            <div class="small text-muted"><i class="bi bi-clock me-1"></i><?= formatDate($d[$stageTimeCol], 'm-d H:i') ?></div>
+                        <?php endif; ?>
                     </div>
                 <?php endforeach; ?>
             </div>

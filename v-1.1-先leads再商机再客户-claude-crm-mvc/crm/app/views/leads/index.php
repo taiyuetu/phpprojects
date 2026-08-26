@@ -125,3 +125,9 @@
     </div>
     <?php endif; ?>
 <?php endforeach; ?>
+
+<?php
+$baseUrl = url('/leads?page=') . ($status ? '&status=' . urlencode($status) : '');
+if (!$status) $baseUrl = url('/leads?page=');
+include APP_PATH . '/views/partials/_pagination.php';
+?>

@@ -5,7 +5,7 @@ class Lead extends Model
     protected string $table = 'leads';
 
     /** All leads, newest first, optional status filter. */
-    public function allLeads(string $status = ''): array
+    public function allLeads(string $status = '', int $page = 1, int $perPage = 15): array
     {
         $sql = "SELECT l.*, u.name AS owner_name FROM leads l LEFT JOIN users u ON u.id = l.owner_id";
         $params = [];
@@ -15,13 +15,33 @@ class Lead extends Model
             $params[':status'] = $status;
         }
 
-        $sql .= " ORDER BY l.created_at DESC";
+        $sql .= " ORDER BY l.created_at DESC LIMIT :limit OFFSET :offset";
 
         $stmt = $this->db()->query($sql);
         foreach ($params as $key => $value) {
             $stmt->bind($key, $value);
         }
+        $stmt->bind(':limit', $perPage, PDO::PARAM_INT);
+        $stmt->bind(':offset', ($page - 1) * $perPage, PDO::PARAM_INT);
         return $stmt->resultSet();
+    }
+
+    /** Count leads matching optional status filter. */
+    public function countLeads(string $status = ''): int
+    {
+        $sql = "SELECT COUNT(*) AS total FROM leads l";
+        $params = [];
+
+        if ($status !== '') {
+            $sql .= " WHERE l.status = :status";
+            $params[':status'] = $status;
+        }
+
+        $stmt = $this->db()->query($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bind($key, $value);
+        }
+        return (int) ($stmt->single()['total'] ?? 0);
     }
 
     public function countByStatus(string $status): int

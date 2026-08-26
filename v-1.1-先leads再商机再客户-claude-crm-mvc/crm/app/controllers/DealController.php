@@ -47,6 +47,7 @@ class DealController extends Controller
         }
 
         $data['owner_id'] = $_SESSION['user_id'];
+        $data['stage_open_at'] = date('Y-m-d H:i:s'); // new deals start as 'open'
         $this->model('Deal')->create($data);
 
         $this->setFlash('success', '商机已创建。');
@@ -86,6 +87,13 @@ class DealController extends Controller
                 'errors' => $errors,
             ]);
             return;
+        }
+
+        // Auto-record stage transition time
+        $oldDeal = $this->model('Deal')->find((int) $id);
+        if ($oldDeal && $oldDeal['stage'] !== $data['stage']) {
+            $stageCol = 'stage_' . $data['stage'] . '_at';
+            $data[$stageCol] = date('Y-m-d H:i:s');
         }
 
         $this->model('Deal')->update((int) $id, $data);

@@ -7,9 +7,21 @@ class LeadController extends Controller
         $this->requireAuth();
 
         $status = trim($_GET['status'] ?? '');
-        $leads = $this->model('Lead')->allLeads($status);
+        $page = max(1, (int) ($_GET['page'] ?? 1));
+        $perPage = 15;
 
-        $this->view('leads/index', ['leads' => $leads, 'status' => $status]);
+        $leadModel = $this->model('Lead');
+        $total = $leadModel->countLeads($status);
+        $totalPages = max(1, (int) ceil($total / $perPage));
+        $page = min($page, $totalPages);
+
+        $this->view('leads/index', [
+            'leads'      => $leadModel->allLeads($status, $page, $perPage),
+            'status'     => $status,
+            'page'       => $page,
+            'totalPages' => $totalPages,
+            'total'      => $total,
+        ]);
     }
 
     public function create(): void
@@ -88,8 +100,24 @@ class LeadController extends Controller
     public function destroy(string $id): void
     {
         $this->requireAuth();
-        $this->model('Lead')->delete((int) $id);
-        $this->setFlash('success', '线索已删除。');
+
+        $leadModel = $this->model('Lead');
+        $lead = $leadModel->find((int) $id);
+
+        if ($lead) {
+            // Cascade: delete deals → customer created from this lead
+            if (!empty($lead['customer_id'])) {
+                $customerId = (int) $lead['customer_id'];
+                $dealModel = $this->model('Deal');
+                foreach ($dealModel->where('customer_id', $customerId) as $deal) {
+                    $dealModel->delete((int) $deal['id']);
+                }
+                $this->model('Customer')->delete($customerId);
+            }
+        }
+
+        $leadModel->delete((int) $id);
+        $this->setFlash('success', '线索及关联的商机、客户已删除。');
         $this->redirect('/leads');
     }
 
@@ -114,9 +142,21 @@ class LeadController extends Controller
         // Auto-create customer from lead contact info
         $customerName = $lead['contact_name'] ?: $lead['title'];
         $customerId = $this->model('Customer')->create([
-            'name'    => $customerName,
-            'email'   => $lead['contact_email'],
-            'owner_id' => $_SESSION['user_id'],
+            'name'         => $customerName,
+            'company'      => $lead['company'] ?? null,
+            'email'        => $lead['contact_email'],
+            'phone'        => $lead['phone'] ?? null,
+            'whatsapp'     => $lead['whatsapp'] ?? null,
+            'facebook'     => $lead['facebook'] ?? null,
+            'tiktok'       => $lead['tiktok'] ?? null,
+            'website'      => $lead['website'] ?? null,
+            'source_country' => $lead['source_country'] ?? null,
+            'source_city'  => $lead['source_city'] ?? null,
+            'address'      => $lead['address'] ?? null,
+            'first_purchase_from_china' => $lead['first_purchase_from_china'] ?? 0,
+            'has_import_capability'     => $lead['has_import_capability'] ?? 0,
+            'conversion_time' => date('Y-m-d H:i:s'),
+            'owner_id'     => $_SESSION['user_id'],
         ]);
 
         // Create deal linked to the new customer
@@ -145,6 +185,7 @@ class LeadController extends Controller
     {
         $this->requireAuth();
         $this->verifyCsrf();
+        $this->model('Lead'); // load class for static lostReasonOptions()
 
         $reason = $_POST['lost_reason'] ?? '';
         $validReasons = array_keys(Lead::lostReasonOptions());
@@ -167,6 +208,7 @@ class LeadController extends Controller
     {
         $this->requireAuth();
         $this->verifyCsrf();
+        $this->model('Lead');
 
         $lead = $this->model('Lead')->find((int) $id);
 
