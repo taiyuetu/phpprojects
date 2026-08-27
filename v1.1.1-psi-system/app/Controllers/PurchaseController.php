@@ -1,0 +1,77 @@
+<?php
+namespace App\Controllers;
+
+use App\Core\Controller;
+use App\Core\Auth;
+use App\Models\Purchase;
+use App\Models\Supplier;
+use App\Models\Product;
+
+class PurchaseController extends Controller
+{
+    public function index(): void
+    {
+        $this->view('purchases/index', [
+            'title'     => 'Purchases',
+            'purchases' => Purchase::allWithSupplier(),
+        ]);
+    }
+
+    public function create(): void
+    {
+        $this->view('purchases/form', [
+            'title'     => 'New Purchase',
+            'suppliers' => Supplier::all('name'),
+            'products'  => Product::all('name'),
+            'nextInvoice' => 'PO-' . date('Ymd') . '-' . str_pad((string)(Purchase::count() + 1), 4, '0', STR_PAD_LEFT),
+        ]);
+    }
+
+    public function store(): void
+    {
+        $this->verifyCsrf();
+
+        $productIds = $this->input('product_id', []);
+        $qtys       = $this->input('qty', []);
+        $costs      = $this->input('unit_cost', []);
+
+        $items = [];
+        foreach ($productIds as $i => $productId) {
+            if (!$productId || !$qtys[$i]) continue;
+            $items[] = [
+                'product_id' => (int) $productId,
+                'qty'        => (int) $qtys[$i],
+                'unit_cost'  => (float) $costs[$i],
+            ];
+        }
+
+        if (empty($items)) {
+            $this->flash('error', 'Add at least one product line before saving.');
+            $this->redirect('/purchases/create');
+        }
+
+        $header = [
+            'invoice_no'    => trim($this->input('invoice_no')),
+            'supplier_id'   => (int) $this->input('supplier_id'),
+            'purchase_date' => $this->input('purchase_date', date('Y-m-d')),
+            'created_by'    => Auth::user()['id'] ?? null,
+        ];
+
+        try {
+            $id = Purchase::createWithItems($header, $items);
+            $this->flash('success', 'Purchase recorded and stock updated.');
+            $this->redirect('/purchases/' . $id);
+        } catch (\Throwable $e) {
+            $this->flash('error', 'Could not save purchase: ' . $e->getMessage());
+            $this->redirect('/purchases/create');
+        }
+    }
+
+    public function show(string $id): void
+    {
+        $purchase = Purchase::withItems((int) $id);
+        if (!$purchase) { $this->flash('error', 'Purchase not found.'); $this->redirect('/purchases'); }
+
+        $this->view('purchases/show', ['title' => 'Purchase #' . $purchase['invoice_no'], 'purchase' => $purchase]);
+    }
+}
