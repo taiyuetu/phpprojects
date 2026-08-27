@@ -29,7 +29,7 @@ spl_autoload_register(function ($class) {
 use App\Core\Router;
 use App\Core\Auth;
 
-Router::$basePath = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
+Router::$basePath = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'])), '/');
 
 // ---- Route table ----
 require __DIR__ . '/../routes/web.php';

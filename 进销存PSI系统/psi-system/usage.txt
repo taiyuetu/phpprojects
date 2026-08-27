@@ -1,0 +1,76 @@
+问题已经解决，项目现在可以正常启动了。以下是排查和修复的完整过程：
+
+ 🔍 问题诊断
+
+ 1. 端口冲突：端口 3000 已被一个旧的 PHP 进程（PID 13704）占用，且该进程监听在 IPv6 地址 [::1]:3000，导致浏览器通过
+    IPv4 的 localhost 连接时被拒绝。
+ 2. 缺少 SQLite 扩展：PHP 8.2 未启用 pdo_sqlite 和 sqlite3 扩展，导致数据库初始化失败。
+
+ 🛠️ 修复步骤
+
+ ### 1. 终止占用端口的旧进程
+
+ ```powershell
+   Stop-Process -Id 13704 -Force
+ ```
+
+ ### 2. 启用 SQLite 扩展
+
+ 编辑 PHP 配置文件：
+
+ ```
+   C:\Users\hdmso\AppData\Roaming\Local\lightning-services\php-8.2.29+0\bin\win64\php.ini
+ ```
+
+ 取消注释以下两行：
+
+ ```ini
+   extension=pdo_sqlite
+   extension=sqlite3
+ ```
+
+ ### 3. 初始化数据库
+
+ ```bash
+   php database/setup.php
+ ```
+
+ 输出：
+
+ ```
+   Schema applied.
+   Default admin created -> email: admin@psi.local / password: admin123
+   Demo reference data seeded.
+ ```
+
+ ### 4. 重新启动 PHP 内置服务器
+
+ ```bash
+   cd public
+   php -S 127.0.0.1:3000
+ ```
+
+ 服务器成功启动并监听在 127.0.0.1:3000。
+
+ ✅ 验证结果
+
+ - 服务器日志显示：PHP 8.2.29 Development Server (http://127.0.0.1:3000) started
+ - 端口监听正常：TCP 127.0.0.1:3000 LISTENING
+ - 数据库已创建：database/database.sqlite
+
+ 🚀 现在可以访问了
+
+ 打开浏览器访问：http://127.0.0.1:3000 或 http://localhost:3000
+
+ 默认登录凭据：
+ - 邮箱：admin@psi.local
+ - 密码：admin123
+
+ 💡 补充说明
+
+ - 如果需要从其他设备访问，可以改用 php -S 0.0.0.0:3000 监听所有网络接口。
+ - 停止服务器：关闭终端窗口或终止 PHP 进程（taskkill /F /IM php.exe）。
+ - 查看服务器日志：public/server.log。
+ - 项目使用 SQLite 数据库，无需额外配置数据库服务。
+
+ 项目现在应该可以完全正常运行了！
