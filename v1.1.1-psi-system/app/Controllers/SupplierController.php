@@ -2,31 +2,49 @@
 namespace App\Controllers;
 
 use App\Core\Controller;
+use App\Core\CsvImportExport;
 use App\Models\Supplier;
 
 class SupplierController extends Controller
 {
+    use CsvImportExport;
+
+    protected function csvModelClass(): string { return Supplier::class; }
+    protected function csvColumns(): array { return ['name', 'phone', 'email', 'address']; }
+    protected function csvMatchField(): string { return 'name'; }
+    protected function csvBasePath(): string { return '/suppliers'; }
+    protected function csvEntityLabel(): string { return 'supplier'; }
+
     public function index(): void
     {
+        $filters = ['q' => trim($this->input('q', ''))] + $this->customFieldFilters(Supplier::customFields());
+
         $this->view('suppliers/index', [
-            'title'     => 'Suppliers',
-            'suppliers' => Supplier::all('name'),
+            'title'        => 'Suppliers',
+            'suppliers'    => Supplier::filterWithCustomFields($filters, ['name', 'phone', 'email'], 'name'),
+            'customFields' => Supplier::customFields(),
+            'filters'      => $filters,
         ]);
     }
 
     public function create(): void
     {
-        $this->view('suppliers/form', ['title' => 'Add Supplier', 'supplier' => null]);
+        $this->view('suppliers/form', [
+            'title'        => 'Add Supplier',
+            'supplier'     => null,
+            'customFields' => Supplier::customFields(),
+        ]);
     }
 
     public function store(): void
     {
         $this->verifyCsrf();
         Supplier::create([
-            'name'    => trim($this->input('name')),
-            'phone'   => trim($this->input('phone')),
-            'email'   => trim($this->input('email')),
-            'address' => trim($this->input('address')),
+            'name'       => trim($this->input('name')),
+            'phone'      => trim($this->input('phone')),
+            'email'      => trim($this->input('email')),
+            'address'    => trim($this->input('address')),
+            'attributes' => json_encode($this->customFieldValues(Supplier::customFields()), JSON_UNESCAPED_UNICODE),
         ]);
         $this->flash('success', 'Supplier added.');
         $this->redirect('/suppliers');
@@ -36,17 +54,22 @@ class SupplierController extends Controller
     {
         $supplier = Supplier::find($id);
         if (!$supplier) { $this->flash('error', 'Supplier not found.'); $this->redirect('/suppliers'); }
-        $this->view('suppliers/form', ['title' => 'Edit Supplier', 'supplier' => $supplier]);
+        $this->view('suppliers/form', [
+            'title'        => 'Edit Supplier',
+            'supplier'     => $supplier,
+            'customFields' => Supplier::customFields(),
+        ]);
     }
 
     public function update(string $id): void
     {
         $this->verifyCsrf();
         Supplier::update($id, [
-            'name'    => trim($this->input('name')),
-            'phone'   => trim($this->input('phone')),
-            'email'   => trim($this->input('email')),
-            'address' => trim($this->input('address')),
+            'name'       => trim($this->input('name')),
+            'phone'      => trim($this->input('phone')),
+            'email'      => trim($this->input('email')),
+            'address'    => trim($this->input('address')),
+            'attributes' => json_encode($this->customFieldValues(Supplier::customFields()), JSON_UNESCAPED_UNICODE),
         ]);
         $this->flash('success', 'Supplier updated.');
         $this->redirect('/suppliers');

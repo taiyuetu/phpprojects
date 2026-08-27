@@ -6,6 +6,7 @@
  */
 return [
     'app_name'   => 'PSI System — Purchase Sales Inventory',
+    'debug'      => true, // show detailed errors; set false in production
     'base_url'   => '/', // change if hosted in a sub-folder
     'db' => [
         'driver'   => 'sqlite',                     // 'sqlite' | 'mysql'

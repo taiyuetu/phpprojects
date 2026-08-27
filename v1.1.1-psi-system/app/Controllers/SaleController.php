@@ -11,9 +11,11 @@ class SaleController extends Controller
 {
     public function index(): void
     {
+        $q = trim($this->input('q', ''));
         $this->view('sales/index', [
             'title' => 'Sales',
-            'sales' => Sale::allWithCustomer(),
+            'sales' => $q !== '' ? Sale::searchWithCustomer($q) : Sale::allWithCustomer(),
+            'q'     => $q,
         ]);
     }
 

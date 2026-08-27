@@ -1,0 +1,19 @@
+# Runtime database (source of truth is database/schema.sql)
+database/database.sqlite
+database/database.sqlite-journal
+database/database.sqlite-wal
+database/database.sqlite-shm
+
+# User-uploaded content
+public/uploads/
+
+# Logs & debug
+public/server.log
+public/debug.txt
+*.log
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

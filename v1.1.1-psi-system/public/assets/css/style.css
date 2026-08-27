@@ -197,3 +197,252 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
     .sidebar { display: none; }
     .content { padding: 16px; }
 }
+
+/* ---------- Gallery Thumbnails (List Page) ---------- */
+.gallery-cell { min-width: 140px; }
+.gallery-thumbs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.gallery-thumb-img {
+    width: 40px;
+    height: 40px;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+.gallery-thumb-img:hover {
+    transform: scale(1.15);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    z-index: 1;
+}
+.gallery-more {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    background: #f1f5f9;
+    padding: 2px 6px;
+    border-radius: 10px;
+    white-space: nowrap;
+}
+
+/* ---------- Gallery Grid (Show Page) ---------- */
+.product-gallery { margin-top: 20px; }
+.product-gallery h3 { margin-bottom: 12px; }
+.gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px;
+}
+.gallery-grid-img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+.gallery-grid-img:hover {
+    transform: scale(1.03);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+
+/* ---------- Gallery Upload (Form Page) ---------- */
+.gallery-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+.gallery-thumb {
+    position: relative;
+    width: 90px;
+    height: 90px;
+}
+.gallery-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+}
+.gallery-remove {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--danger);
+    color: #fff;
+    border: 2px solid #fff;
+    font-size: 14px;
+    line-height: 18px;
+    text-align: center;
+    cursor: pointer;
+    padding: 0;
+}
+.gallery-upload-area {
+    position: relative;
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+}
+.gallery-upload-area:hover,
+.gallery-upload-area.drag-over {
+    border-color: var(--primary);
+    background: rgba(37,99,235,0.04);
+}
+.gallery-upload-area input[type=file] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+.upload-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-muted);
+    pointer-events: none;
+}
+.upload-icon { font-size: 2rem; }
+.upload-hint { font-size: 0.78rem; color: #94a3b8; }
+.upload-preview {
+    display: none;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    pointer-events: none;
+}
+.gallery-thumb.new-upload {
+    width: 80px;
+    height: 80px;
+}
+
+/* ---------- Lightbox ---------- */
+.lightbox-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0,0,0,0.88);
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+}
+.lightbox-overlay.active {
+    display: flex;
+}
+.lightbox-content {
+    max-width: 90vw;
+    max-height: 85vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.lightbox-content img {
+    max-width: 100%;
+    max-height: 85vh;
+    object-fit: contain;
+    border-radius: 4px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+.lightbox-close {
+    position: absolute;
+    top: 16px;
+    right: 24px;
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 2.2rem;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+    z-index: 10;
+}
+.lightbox-close:hover { opacity: 1; }
+.lightbox-prev,
+.lightbox-next {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255,255,255,0.12);
+    border: none;
+    color: #fff;
+    font-size: 2.5rem;
+    padding: 8px 16px;
+    cursor: pointer;
+    border-radius: 4px;
+    opacity: 0.7;
+    transition: opacity 0.2s, background 0.2s;
+    z-index: 10;
+}
+.lightbox-prev { left: 16px; }
+.lightbox-next { right: 16px; }
+.lightbox-prev:hover,
+.lightbox-next:hover {
+    opacity: 1;
+    background: rgba(255,255,255,0.25);
+}
+.lightbox-counter {
+    color: rgba(255,255,255,0.7);
+    font-size: 0.9rem;
+    margin-top: 12px;
+}
+
+/* ---------- Search Form ---------- */
+.search-form {
+    display: flex;
+    align-items: center;
+}
+.search-form input[type=search],
+.filter-form input[type=search] {
+    width: 220px;
+    padding: 7px 12px 7px 32px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85zm-5.242.156a5 5 0 1 1 0-10 5 5 0 0 1 0 10z'/%3E%3C/svg%3E") no-repeat 10px center;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.search-form input[type=search]:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+    width: 280px;
+}
+.filter-form input[type=search]:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+}
+
+/* ---------- Filter Form ---------- */
+.filter-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    padding-bottom: 16px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+}
+.filter-form select {
+    width: auto;
+    min-width: 160px;
+    padding: 7px 12px;
+    font-size: 0.85rem;
+}
+.filter-form input[type=text] {
+    width: 160px;
+    padding: 7px 12px;
+    font-size: 0.85rem;
+}

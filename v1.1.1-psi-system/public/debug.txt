@@ -1,4 +1,0 @@
-basePath: 
-SCRIPT_NAME: /index.php
-basePath: 
-SCRIPT_NAME: /index.php

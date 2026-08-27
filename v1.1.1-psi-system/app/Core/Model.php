@@ -6,7 +6,7 @@ use App\Models\ChangeLog;
 
 /**
  * Base Model.
- * Every model extends this and just sets $table (+ $fillable).
+ * Every model extends this and sets $table + $fillable.
  * Gives every model consistent, predictable CRUD + query-building
  * without needing a heavy ORM dependency.
  */
@@ -15,6 +15,13 @@ abstract class Model
     protected static string $table;
     protected static string $primaryKey = 'id';
     protected static bool $logChanges = true; // 是否记录变更日志
+
+    /**
+     * Whitelist of columns that may be written via create()/update().
+     * An empty array means "allow all" (backward compatible). Defining it
+     * is strongly recommended to prevent accidental mass-assignment.
+     */
+    protected static array $fillable = [];
 
     public static function db(): PDO
     {
@@ -53,8 +60,32 @@ abstract class Model
         return $stmt->fetchAll();
     }
 
+    /** Check whether a value already exists in a column (optionally excluding a row id). */
+    public static function exists(string $column, $value, ?int $excludeId = null): bool
+    {
+        $sql = 'SELECT COUNT(*) FROM ' . static::$table . " WHERE {$column} = ?";
+        $params = [$value];
+        if ($excludeId !== null) {
+            $sql .= ' AND ' . static::$primaryKey . ' != ?';
+            $params[] = $excludeId;
+        }
+        $stmt = static::db()->prepare($sql);
+        $stmt->execute($params);
+        return (int) $stmt->fetchColumn() > 0;
+    }
+
+    /** Keep only columns whitelisted in $fillable (no-op when $fillable is empty). */
+    protected static function filterFillable(array $data): array
+    {
+        if (empty(static::$fillable)) {
+            return $data;
+        }
+        return array_intersect_key($data, array_flip(static::$fillable));
+    }
+
     public static function create(array $data): int
     {
+        $data = static::filterFillable($data);
         $columns = array_keys($data);
         $placeholders = array_map(fn($c) => ':' . $c, $columns);
 
@@ -74,6 +105,8 @@ abstract class Model
 
     public static function update($id, array $data): bool
     {
+        $data = static::filterFillable($data);
+
         // 获取旧数据用于日志记录
         $oldData = null;
         if (static::$logChanges && static::$table !== 'change_logs') {
@@ -123,6 +156,28 @@ abstract class Model
     {
         $stmt = static::db()->prepare($sql);
         $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * Simple LIKE search across one or more columns.
+     * Usage: Product::search('foo', ['sku', 'name'])
+     */
+    public static function search(string $query, array $columns, string $orderBy = null): array
+    {
+        if ($query === '' || empty($columns)) {
+            return static::all($orderBy);
+        }
+
+        $conditions = [];
+        foreach ($columns as $col) {
+            $conditions[] = "{$col} LIKE :q";
+        }
+        $sql = 'SELECT * FROM ' . static::$table . ' WHERE ' . implode(' OR ', $conditions);
+        if ($orderBy) $sql .= ' ORDER BY ' . $orderBy;
+
+        $stmt = static::db()->prepare($sql);
+        $stmt->execute(['q' => '%' . $query . '%']);
         return $stmt->fetchAll();
     }
 }

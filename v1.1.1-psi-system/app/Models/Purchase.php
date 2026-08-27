@@ -6,6 +6,7 @@ use App\Core\Model;
 class Purchase extends Model
 {
     protected static string $table = 'purchases';
+    protected static array $fillable = ['invoice_no', 'supplier_id', 'purchase_date', 'total', 'created_by'];
 
     public static function allWithSupplier(): array
     {
@@ -14,6 +15,19 @@ class Purchase extends Model
              FROM purchases pu
              JOIN suppliers s ON s.id = pu.supplier_id
              ORDER BY pu.purchase_date DESC, pu.id DESC'
+        );
+    }
+
+    /** Search purchases by invoice_no or supplier name. */
+    public static function searchWithSupplier(string $query): array
+    {
+        return self::raw(
+            'SELECT pu.*, s.name AS supplier_name
+             FROM purchases pu
+             JOIN suppliers s ON s.id = pu.supplier_id
+             WHERE pu.invoice_no LIKE :q OR s.name LIKE :q
+             ORDER BY pu.purchase_date DESC, pu.id DESC',
+            ['q' => '%' . $query . '%']
         );
     }
 

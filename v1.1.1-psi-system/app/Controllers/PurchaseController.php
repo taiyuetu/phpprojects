@@ -11,9 +11,11 @@ class PurchaseController extends Controller
 {
     public function index(): void
     {
+        $q = trim($this->input('q', ''));
         $this->view('purchases/index', [
             'title'     => 'Purchases',
-            'purchases' => Purchase::allWithSupplier(),
+            'purchases' => $q !== '' ? Purchase::searchWithSupplier($q) : Purchase::allWithSupplier(),
+            'q'         => $q,
         ]);
     }
 

@@ -45,6 +45,29 @@ abstract class Controller
         return $_POST;
     }
 
+    /** Collect custom-field filter params (cf_*) from the request. */
+    protected function customFieldFilters(array $customFields): array
+    {
+        $filters = [];
+        foreach ($customFields as $key => $def) {
+            if (!empty($def['filterable'])) {
+                $filters['cf_' . $key] = trim($this->input('cf_' . $key, ''));
+            }
+        }
+        return $filters;
+    }
+
+    /** Collect custom-field values (cf_*) from the request into an assoc array. */
+    protected function customFieldValues(array $customFields): array
+    {
+        $attrs = [];
+        foreach ($customFields as $key => $def) {
+            $v = trim($this->input('cf_' . $key, ''));
+            if ($v !== '') $attrs[$key] = $v;
+        }
+        return $attrs;
+    }
+
     protected function flash(string $type, string $message): void
     {
         $_SESSION['flash'][$type] = $message;

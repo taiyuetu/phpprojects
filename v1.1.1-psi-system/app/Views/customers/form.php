@@ -1,4 +1,7 @@
-<?php use App\Core\Router; ?>
+<?php
+use App\Core\Router;
+$attrs = json_decode($customer['attributes'] ?? '{}', true) ?: [];
+?>
 <div class="card" style="max-width:600px;">
     <h2><?= $customer ? 'Edit Customer' : 'Add Customer' ?></h2>
     <form method="post" action="<?= $customer ? Router::url('/customers/' . $customer['id']) : Router::url('/customers') ?>">
@@ -21,6 +24,7 @@
             <label>Address</label>
             <textarea name="address" rows="2"><?= htmlspecialchars($customer['address'] ?? '') ?></textarea>
         </div>
+        <?php include __DIR__ . '/../partials/custom_fields_form.php'; ?>
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Save</button>
             <a href="<?= Router::url('/customers') ?>" class="btn btn-secondary">Cancel</a>

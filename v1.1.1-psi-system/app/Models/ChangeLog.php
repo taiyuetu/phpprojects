@@ -9,6 +9,7 @@ use App\Core\Model;
 class ChangeLog extends Model
 {
     protected static string $table = 'change_logs';
+    protected static array $fillable = ['table_name', 'record_id', 'action', 'old_data', 'new_data', 'user_id'];
     protected static bool $compressData = true; // 是否压缩数据（只记录变更字段）
 
     /**

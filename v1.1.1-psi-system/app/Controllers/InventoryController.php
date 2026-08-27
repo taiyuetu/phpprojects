@@ -9,9 +9,11 @@ class InventoryController extends Controller
 {
     public function index(): void
     {
+        $q = trim($this->input('q', ''));
         $this->view('inventory/index', [
             'title'        => 'Inventory Ledger',
-            'transactions' => InventoryTransaction::recent(200),
+            'transactions' => $q !== '' ? InventoryTransaction::searchRecent($q, 200) : InventoryTransaction::recent(200),
+            'q'            => $q,
         ]);
     }
 

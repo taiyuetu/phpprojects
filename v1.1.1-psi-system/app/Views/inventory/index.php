@@ -1,7 +1,14 @@
 <?php use App\Core\Router; ?>
 <div class="card">
-    <h2>Full Stock Ledger</h2>
-    <p class="text-muted">Every stock-changing event across all products — purchases, sales, and manual adjustments — most recent first.</p>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div>
+            <h2 style="margin:0;">Full Stock Ledger</h2>
+            <p class="text-muted" style="margin:4px 0 0;">Every stock-changing event across all products — purchases, sales, and manual adjustments — most recent first.</p>
+        </div>
+        <form method="get" action="<?= Router::url('/inventory') ?>" class="search-form">
+            <input type="search" name="q" placeholder="Search ledger..." value="<?= htmlspecialchars($q ?? '') ?>">
+        </form>
+    </div>
 
     <?php if (empty($transactions)): ?>
         <p class="empty-state">No stock movements recorded yet.</p>

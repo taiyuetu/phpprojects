@@ -2,7 +2,12 @@
 <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
         <h2 style="margin:0;">Purchase Orders</h2>
-        <a href="<?= Router::url('/purchases/create') ?>" class="btn btn-primary">+ New Purchase</a>
+        <div style="display:flex;gap:10px;align-items:center;">
+            <form method="get" action="<?= Router::url('/purchases') ?>" class="search-form">
+                <input type="search" name="q" placeholder="Search purchases..." value="<?= htmlspecialchars($q ?? '') ?>">
+            </form>
+            <a href="<?= Router::url('/purchases/create') ?>" class="btn btn-primary">+ New Purchase</a>
+        </div>
     </div>
 
     <?php if (empty($purchases)): ?>

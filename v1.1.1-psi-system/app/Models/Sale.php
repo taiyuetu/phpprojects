@@ -7,6 +7,7 @@ use RuntimeException;
 class Sale extends Model
 {
     protected static string $table = 'sales';
+    protected static array $fillable = ['invoice_no', 'customer_id', 'sale_date', 'total', 'created_by'];
 
     public static function allWithCustomer(): array
     {
@@ -15,6 +16,19 @@ class Sale extends Model
              FROM sales sa
              LEFT JOIN customers c ON c.id = sa.customer_id
              ORDER BY sa.sale_date DESC, sa.id DESC'
+        );
+    }
+
+    /** Search sales by invoice_no or customer name. */
+    public static function searchWithCustomer(string $query): array
+    {
+        return self::raw(
+            'SELECT sa.*, c.name AS customer_name
+             FROM sales sa
+             LEFT JOIN customers c ON c.id = sa.customer_id
+             WHERE sa.invoice_no LIKE :q OR c.name LIKE :q
+             ORDER BY sa.sale_date DESC, sa.id DESC',
+            ['q' => '%' . $query . '%']
         );
     }
 

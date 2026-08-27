@@ -2,7 +2,12 @@
 <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
         <h2 style="margin:0;">Sales Invoices</h2>
-        <a href="<?= Router::url('/sales/create') ?>" class="btn btn-primary">+ New Sale</a>
+        <div style="display:flex;gap:10px;align-items:center;">
+            <form method="get" action="<?= Router::url('/sales') ?>" class="search-form">
+                <input type="search" name="q" placeholder="Search sales..." value="<?= htmlspecialchars($q ?? '') ?>">
+            </form>
+            <a href="<?= Router::url('/sales/create') ?>" class="btn btn-primary">+ New Sale</a>
+        </div>
     </div>
 
     <?php if (empty($sales)): ?>

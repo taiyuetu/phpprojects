@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS categories (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     name       TEXT NOT NULL UNIQUE,
+    attributes TEXT DEFAULT '{}',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -22,6 +23,7 @@ CREATE TABLE IF NOT EXISTS suppliers (
     phone      TEXT,
     email      TEXT,
     address    TEXT,
+    attributes TEXT DEFAULT '{}',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -31,6 +33,7 @@ CREATE TABLE IF NOT EXISTS customers (
     phone      TEXT,
     email      TEXT,
     address    TEXT,
+    attributes TEXT DEFAULT '{}',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -44,6 +47,8 @@ CREATE TABLE IF NOT EXISTS products (
     sale_price    REAL NOT NULL DEFAULT 0,
     quantity      INTEGER NOT NULL DEFAULT 0,
     reorder_level INTEGER NOT NULL DEFAULT 0,
+    gallery       TEXT DEFAULT '[]',
+    attributes    TEXT DEFAULT '{}',
     created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
 );

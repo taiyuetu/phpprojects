@@ -6,9 +6,9 @@
  */
 
 error_reporting(E_ALL);
-ini_set('display_errors', '1');
 
 $config = require __DIR__ . '/../config/config.php';
+ini_set('display_errors', !empty($config['debug']) ? '1' : '0');
 
 session_name($config['session_name']);
 session_start();
@@ -44,4 +44,15 @@ if (!in_array($normalized, $publicPaths) && !Auth::check()) {
     exit;
 }
 
-Router::dispatch($_SERVER['REQUEST_URI'], $_SERVER['REQUEST_METHOD']);
+try {
+    Router::dispatch($_SERVER['REQUEST_URI'], $_SERVER['REQUEST_METHOD']);
+} catch (\Throwable $e) {
+    error_log('[PSI] ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+    http_response_code(500);
+    if (!empty($config['debug'])) {
+        echo '<h1 style="font-family:sans-serif">500 — Server error</h1>'
+            . '<pre style="font-family:monospace">' . htmlspecialchars($e->getMessage() . "\n\n" . $e->getTraceAsString()) . '</pre>';
+    } else {
+        echo '<h1 style="font-family:sans-serif">500 — Server error</h1><p>Something went wrong. Please try again.</p>';
+    }
+}
