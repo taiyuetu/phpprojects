@@ -10,10 +10,15 @@ class InventoryController extends Controller
     public function index(): void
     {
         $q = trim($this->input('q', ''));
+        $page = max(1, (int) $this->input('page', 1));
+
+        $result = InventoryTransaction::filterPaginated($q, $page);
+
         $this->view('inventory/index', [
             'title'        => 'Inventory Ledger',
-            'transactions' => $q !== '' ? InventoryTransaction::searchRecent($q, 200) : InventoryTransaction::recent(200),
+            'transactions' => $result['rows'],
             'q'            => $q,
+            'pagination'   => $result,
         ]);
     }
 

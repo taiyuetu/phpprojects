@@ -12,10 +12,19 @@ class PurchaseController extends Controller
     public function index(): void
     {
         $q = trim($this->input('q', ''));
+        $dateFrom = trim($this->input('date_from', ''));
+        $dateTo   = trim($this->input('date_to', ''));
+        $page = max(1, (int) $this->input('page', 1));
+
+        $result = Purchase::filterPaginated($q, $dateFrom, $dateTo, $page);
+
         $this->view('purchases/index', [
             'title'     => 'Purchases',
-            'purchases' => $q !== '' ? Purchase::searchWithSupplier($q) : Purchase::allWithSupplier(),
+            'purchases' => $result['rows'],
             'q'         => $q,
+            'date_from' => $dateFrom,
+            'date_to'   => $dateTo,
+            'pagination' => $result,
         ]);
     }
 

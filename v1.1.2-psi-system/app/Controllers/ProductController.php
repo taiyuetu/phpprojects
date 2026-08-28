@@ -32,12 +32,18 @@ class ProductController extends Controller
             }
         }
 
+        $page = max(1, (int) $this->input('page', 1));
+        $perPage = 20;
+
+        $result = Product::filterPaginated($filters, $page, $perPage);
+
         $this->view('products/index', [
             'title'        => 'Products',
-            'products'     => Product::filter($filters),
+            'products'     => $result['rows'],
             'categories'   => Category::all('name'),
             'customFields' => Product::customFields(),
             'filters'      => $filters,
+            'pagination'   => $result,
         ]);
     }
 

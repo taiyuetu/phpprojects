@@ -165,4 +165,58 @@ trait HasCustomFields
 
         return static::raw($sql, $params);
     }
+
+    /**
+     * Paginated version of filterWithCustomFields().
+     * Returns ['rows'=>array, 'total'=>int, 'page'=>int, 'perPage'=>int, 'pages'=>int]
+     */
+    public static function filterWithCustomFieldsPaginated(array $filters = [], array $searchColumns = [], ?string $orderBy = null, int $page = 1, int $perPage = 20): array
+    {
+        $where = ' WHERE 1 = 1';
+        $params = [];
+
+        $q = trim($filters['q'] ?? '');
+        if ($q !== '' && !empty($searchColumns)) {
+            $conds = [];
+            foreach ($searchColumns as $i => $col) {
+                $p = 'qs_' . $i;
+                $conds[] = "{$col} LIKE :{$p}";
+                $params[$p] = '%' . $q . '%';
+            }
+            $where .= ' AND (' . implode(' OR ', $conds) . ')';
+        }
+
+        $cf = static::customFieldFilterSql($filters);
+        $where .= $cf['sql'];
+        $params = array_merge($params, $cf['params']);
+
+        // Count
+        $countSql = 'SELECT COUNT(*) FROM ' . static::$table . $where;
+        $countStmt = static::db()->prepare($countSql);
+        $countStmt->execute($params);
+        $total = (int) $countStmt->fetchColumn();
+
+        $pages = max(1, (int) ceil($total / $perPage));
+        $page = max(1, min($page, $pages));
+        $offset = ($page - 1) * $perPage;
+
+        $orderClause = $orderBy ? ' ORDER BY ' . $orderBy : '';
+        $dataSql = 'SELECT * FROM ' . static::$table . $where . $orderClause . ' LIMIT :limit OFFSET :offset';
+        $dataStmt = static::db()->prepare($dataSql);
+        foreach ($params as $k => $v) {
+            $dataStmt->bindValue(':' . $k, $v);
+        }
+        $dataStmt->bindValue(':limit', $perPage, \PDO::PARAM_INT);
+        $dataStmt->bindValue(':offset', $offset, \PDO::PARAM_INT);
+        $dataStmt->execute();
+        $rows = $dataStmt->fetchAll();
+
+        return [
+            'rows'    => $rows,
+            'total'   => $total,
+            'page'    => $page,
+            'perPage' => $perPage,
+            'pages'   => $pages,
+        ];
+    }
 }

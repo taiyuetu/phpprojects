@@ -77,6 +77,86 @@ class Product extends Model
         return self::raw($sql, $params);
     }
 
+    /**
+     * Paginated version of filter().
+     * Returns ['rows' => array, 'total' => int, 'page' => int, 'perPage' => int, 'pages' => int]
+     */
+    public static function filterPaginated(array $filters = [], int $page = 1, int $perPage = 20): array
+    {
+        // Build the WHERE clause (shared between count and data queries)
+        $where = ' WHERE 1 = 1';
+        $params = [];
+
+        if (!empty($filters['q'])) {
+            $where .= ' AND (p.sku LIKE :q OR p.name LIKE :q OR c.name LIKE :q)';
+            $params['q'] = '%' . $filters['q'] . '%';
+        }
+
+        if (!empty($filters['category_id'])) {
+            $where .= ' AND p.category_id = :category_id';
+            $params['category_id'] = (int) $filters['category_id'];
+        }
+
+        if (($filters['status'] ?? '') === 'low') {
+            $where .= ' AND p.quantity <= p.reorder_level';
+        } elseif (($filters['status'] ?? '') === 'in') {
+            $where .= ' AND p.quantity > p.reorder_level';
+        }
+
+        // Custom field filters
+        $cfSql = '';
+        foreach (self::customFields() as $key => $def) {
+            if (empty($def['filterable'])) continue;
+            $value = $filters['cf_' . $key] ?? '';
+            if ($value === '') continue;
+            $path = '$.' . $key;
+            $pKey = 'cfp_' . $key;
+            $vKey = 'cfv_' . $key;
+            if (($def['type'] ?? 'text') === 'select') {
+                $cfSql .= " AND json_extract(p.attributes, :{$pKey}) = :{$vKey}";
+                $params[$vKey] = $value;
+            } else {
+                $cfSql .= " AND json_extract(p.attributes, :{$pKey}) LIKE :{$vKey}";
+                $params[$vKey] = '%' . $value . '%';
+            }
+            $params[$pKey] = $path;
+        }
+
+        // Count total matching rows
+        $countSql = 'SELECT COUNT(*) FROM products p LEFT JOIN categories c ON c.id = p.category_id' . $where . $cfSql;
+        $countStmt = self::db()->prepare($countSql);
+        $countStmt->execute($params);
+        $total = (int) $countStmt->fetchColumn();
+
+        // Calculate pagination
+        $pages = max(1, (int) ceil($total / $perPage));
+        $page = max(1, min($page, $pages));
+        $offset = ($page - 1) * $perPage;
+
+        // Fetch the page of data
+        $dataSql = 'SELECT p.*, c.name AS category_name
+                    FROM products p
+                    LEFT JOIN categories c ON c.id = p.category_id'
+                    . $where . $cfSql
+                    . ' ORDER BY p.name LIMIT :limit OFFSET :offset';
+        $dataStmt = self::db()->prepare($dataSql);
+        foreach ($params as $k => $v) {
+            $dataStmt->bindValue(':' . $k, $v);
+        }
+        $dataStmt->bindValue(':limit', $perPage, \PDO::PARAM_INT);
+        $dataStmt->bindValue(':offset', $offset, \PDO::PARAM_INT);
+        $dataStmt->execute();
+        $rows = $dataStmt->fetchAll();
+
+        return [
+            'rows'    => $rows,
+            'total'   => $total,
+            'page'    => $page,
+            'perPage' => $perPage,
+            'pages'   => $pages,
+        ];
+    }
+
     public static function lowStock(): array
     {
         return self::raw(

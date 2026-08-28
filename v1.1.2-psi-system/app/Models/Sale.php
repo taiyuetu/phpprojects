@@ -19,17 +19,91 @@ class Sale extends Model
         );
     }
 
-    /** Search sales by invoice_no or customer name. */
-    public static function searchWithCustomer(string $query): array
+    /** Search sales by invoice_no or customer name, with optional date range. */
+    public static function searchWithCustomer(string $query, string $dateFrom = '', string $dateTo = ''): array
     {
-        return self::raw(
-            'SELECT sa.*, c.name AS customer_name
-             FROM sales sa
-             LEFT JOIN customers c ON c.id = sa.customer_id
-             WHERE sa.invoice_no LIKE :q OR c.name LIKE :q
-             ORDER BY sa.sale_date DESC, sa.id DESC',
-            ['q' => '%' . $query . '%']
-        );
+        $sql = 'SELECT sa.*, c.name AS customer_name
+                FROM sales sa
+                LEFT JOIN customers c ON c.id = sa.customer_id
+                WHERE (sa.invoice_no LIKE :q OR c.name LIKE :q)';
+        $params = ['q' => '%' . $query . '%'];
+
+        if ($dateFrom !== '') {
+            $sql .= ' AND sa.sale_date >= :date_from';
+            $params['date_from'] = $dateFrom;
+        }
+        if ($dateTo !== '') {
+            $sql .= ' AND sa.sale_date <= :date_to';
+            $params['date_to'] = $dateTo;
+        }
+
+        $sql .= ' ORDER BY sa.sale_date DESC, sa.id DESC';
+        return self::raw($sql, $params);
+    }
+
+    /** All sales with customer, filtered by optional date range. */
+    public static function allWithCustomerFiltered(string $dateFrom = '', string $dateTo = ''): array
+    {
+        $sql = 'SELECT sa.*, c.name AS customer_name
+                FROM sales sa
+                LEFT JOIN customers c ON c.id = sa.customer_id
+                WHERE 1 = 1';
+        $params = [];
+
+        if ($dateFrom !== '') {
+            $sql .= ' AND sa.sale_date >= :date_from';
+            $params['date_from'] = $dateFrom;
+        }
+        if ($dateTo !== '') {
+            $sql .= ' AND sa.sale_date <= :date_to';
+            $params['date_to'] = $dateTo;
+        }
+
+        $sql .= ' ORDER BY sa.sale_date DESC, sa.id DESC';
+        return self::raw($sql, $params);
+    }
+
+    /** Paginated version of searchWithCustomer / allWithCustomerFiltered. */
+    public static function filterPaginated(string $query = '', string $dateFrom = '', string $dateTo = '', int $page = 1, int $perPage = 20): array
+    {
+        $where = ' WHERE 1 = 1';
+        $params = [];
+
+        if ($query !== '') {
+            $where .= ' AND (sa.invoice_no LIKE :q OR c.name LIKE :q)';
+            $params['q'] = '%' . $query . '%';
+        }
+        if ($dateFrom !== '') {
+            $where .= ' AND sa.sale_date >= :date_from';
+            $params['date_from'] = $dateFrom;
+        }
+        if ($dateTo !== '') {
+            $where .= ' AND sa.sale_date <= :date_to';
+            $params['date_to'] = $dateTo;
+        }
+
+        $join = 'FROM sales sa LEFT JOIN customers c ON c.id = sa.customer_id';
+
+        $countStmt = self::db()->prepare('SELECT COUNT(*) ' . $join . $where);
+        $countStmt->execute($params);
+        $total = (int) $countStmt->fetchColumn();
+
+        $pages = max(1, (int) ceil($total / $perPage));
+        $page = max(1, min($page, $pages));
+        $offset = ($page - 1) * $perPage;
+
+        $dataSql = 'SELECT sa.*, c.name AS customer_name ' . $join . $where
+                   . ' ORDER BY sa.sale_date DESC, sa.id DESC LIMIT :limit OFFSET :offset';
+        $dataStmt = self::db()->prepare($dataSql);
+        foreach ($params as $k => $v) {
+            $dataStmt->bindValue(':' . $k, $v);
+        }
+        $dataStmt->bindValue(':limit', $perPage, \PDO::PARAM_INT);
+        $dataStmt->bindValue(':offset', $offset, \PDO::PARAM_INT);
+        $dataStmt->execute();
+        $rows = $dataStmt->fetchAll();
+
+        return ['rows' => $rows, 'total' => $total, 'page' => $page, 'perPage' => $perPage, 'pages' => $pages];
     }
 
     public static function withItems(int $id): ?array

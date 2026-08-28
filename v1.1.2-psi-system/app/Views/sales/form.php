@@ -1,4 +1,78 @@
 <?php use App\Core\Router; ?>
+<style>
+/* Add-item area */
+.add-item-area {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+}
+.add-item-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+.add-item-row .form-group { margin-bottom: 0; }
+.autocomplete-wrap {
+    position: relative;
+    width: 260px;
+}
+.autocomplete-wrap input {
+    width: 100%;
+}
+.autocomplete-list {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 260px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.12);
+    z-index: 100;
+    display: none;
+}
+.autocomplete-list .ac-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: .9rem;
+}
+.autocomplete-list .ac-item:hover,
+.autocomplete-list .ac-item.active {
+    background: #e8f0fe;
+}
+.autocomplete-list .ac-item .ac-sku {
+    color: #6b7280;
+    font-size: .8rem;
+    margin-left: 6px;
+}
+.autocomplete-list .ac-item .ac-stock {
+    float: right;
+    color: #9ca3af;
+    font-size: .8rem;
+}
+.autocomplete-list .ac-empty {
+    padding: 10px 12px;
+    color: #9ca3af;
+    font-size: .85rem;
+}
+.add-item-select {
+    width: 260px;
+}
+.product-name-cell {
+    font-weight: 500;
+}
+.product-name-cell .sku-label {
+    color: #6b7280;
+    font-size: .8rem;
+}
+</style>
+
 <div class="card">
     <h2>New Sale</h2>
     <form method="post" action="<?= Router::url('/sales') ?>" id="sale-form">
@@ -24,7 +98,27 @@
             </div>
         </div>
 
-        <h3>Line Items</h3>
+        <h3>Add Item</h3>
+        <div class="add-item-area">
+            <div class="add-item-row">
+                <div class="autocomplete-wrap">
+                    <input type="text" id="product-search" placeholder="Search by name or SKU…" autocomplete="off">
+                    <div class="autocomplete-list" id="ac-list"></div>
+                </div>
+                <div class="form-group">
+                    <input type="number" id="add-qty" min="1" value="1" placeholder="Qty" style="width:80px;">
+                </div>
+                <div class="form-group">
+                    <input type="number" id="add-price" min="0" step="0.01" value="0" placeholder="Unit Price" style="width:110px;">
+                </div>
+                <button type="button" class="btn btn-primary btn-sm" id="add-item-btn">Add</button>
+            </div>
+            <select id="product-select" class="add-item-select" style="margin-top:8px;">
+                <option value="">— or select from list —</option>
+            </select>
+        </div>
+
+        <h3>Items</h3>
         <div class="table-wrap">
         <table class="line-items" id="items-table">
             <thead>
@@ -33,8 +127,7 @@
             <tbody id="items-body"></tbody>
         </table>
         </div>
-
-        <button type="button" class="btn btn-secondary btn-sm" id="add-row" style="margin-top:10px;">+ Add Line</button>
+        <p id="no-items-msg" style="color:#9ca3af;font-size:.9rem;margin-top:8px;">No items added yet. Search and add products above.</p>
 
         <div style="text-align:right;margin-top:16px;font-size:1.1rem;">
             <strong>Grand Total: $<span id="grand-total">0.00</span></strong>
@@ -49,28 +142,180 @@
 
 <script>
 const PRODUCTS = <?= json_encode(array_map(fn($p) => [
-    'id' => $p['id'], 'name' => $p['name'], 'price' => (float)$p['sale_price'], 'stock' => (int)$p['quantity']
+    'id' => (int)$p['id'], 'name' => $p['name'], 'sku' => $p['sku'],
+    'price' => (float)$p['sale_price'], 'stock' => (int)$p['quantity']
 ], $products)) ?>;
 
 const body = document.getElementById('items-body');
+const searchInput = document.getElementById('product-search');
+const acList = document.getElementById('ac-list');
+const productSelect = document.getElementById('product-select');
+const addQty = document.getElementById('add-qty');
+const addPrice = document.getElementById('add-price');
+const addBtn = document.getElementById('add-item-btn');
+const noItemsMsg = document.getElementById('no-items-msg');
 
-function productOptions(selected = '') {
-    let html = '<option value="">Select…</option>';
-    PRODUCTS.forEach(p => {
-        html += `<option value="${p.id}" data-price="${p.price}" data-stock="${p.stock}" ${String(p.id) === String(selected) ? 'selected' : ''}>${p.name}</option>`;
+let acIndex = -1;
+let selectedProduct = null;
+
+// ── Populate the <select> dropdown ──
+PRODUCTS.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.name + ' [' + p.sku + ']  (Stock: ' + p.stock + ')';
+    opt.dataset.price = p.price;
+    opt.dataset.stock = p.stock;
+    productSelect.appendChild(opt);
+});
+
+// ── Select dropdown change ──
+productSelect.addEventListener('change', () => {
+    const id = productSelect.value;
+    if (!id) { selectedProduct = null; return; }
+    const p = PRODUCTS.find(pr => pr.id == id);
+    if (p) {
+        selectedProduct = p;
+        searchInput.value = p.name;
+        addPrice.value = p.price.toFixed(2);
+        addQty.focus();
+        addQty.select();
+    }
+});
+
+// ── Autocomplete search ──
+searchInput.addEventListener('input', () => {
+    selectedProduct = null;
+    productSelect.value = '';
+    const q = searchInput.value.trim().toLowerCase();
+    if (q.length === 0) { hideAc(); return; }
+
+    const matches = PRODUCTS.filter(p =>
+        p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q)
+    ).slice(0, 20);
+
+    if (matches.length === 0) {
+        acList.innerHTML = '<div class="ac-empty">No products found</div>';
+        acList.style.display = 'block';
+        acIndex = -1;
+        return;
+    }
+
+    acList.innerHTML = matches.map((p, i) =>
+        `<div class="ac-item" data-idx="${i}" data-id="${p.id}">
+            ${escHtml(p.name)}<span class="ac-sku">[${escHtml(p.sku)}]</span>
+            <span class="ac-stock">Stock: ${p.stock}</span>
+        </div>`
+    ).join('');
+    acList.style.display = 'block';
+    acIndex = -1;
+
+    acList.querySelectorAll('.ac-item').forEach(el => {
+        el.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            pickProduct(PRODUCTS.find(p => p.id == el.dataset.id));
+        });
     });
-    return html;
+});
+
+searchInput.addEventListener('keydown', (e) => {
+    const items = acList.querySelectorAll('.ac-item');
+    if (!items.length) {
+        if (e.key === 'Enter') e.preventDefault();
+        return;
+    }
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        acIndex = Math.min(acIndex + 1, items.length - 1);
+        updateAcHighlight(items);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        acIndex = Math.max(acIndex - 1, 0);
+        updateAcHighlight(items);
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (acIndex >= 0 && items[acIndex]) {
+            pickProduct(PRODUCTS.find(p => p.id == items[acIndex].dataset.id));
+        } else if (items.length === 1) {
+            pickProduct(PRODUCTS.find(p => p.id == items[0].dataset.id));
+        }
+    } else if (e.key === 'Escape') {
+        hideAc();
+    }
+});
+
+searchInput.addEventListener('blur', () => { setTimeout(hideAc, 150); });
+
+function updateAcHighlight(items) {
+    items.forEach((el, i) => el.classList.toggle('active', i === acIndex));
+    if (items[acIndex]) items[acIndex].scrollIntoView({ block: 'nearest' });
 }
 
-function addRow() {
+function hideAc() {
+    acList.style.display = 'none';
+    acIndex = -1;
+}
+
+// Shared: called from search or select
+function pickProduct(product) {
+    if (!product) return;
+    selectedProduct = product;
+    productSelect.value = product.id;
+    searchInput.value = product.name;
+    addPrice.value = product.price.toFixed(2);
+    hideAc();
+    addQty.focus();
+    addQty.select();
+}
+
+// ── Add item to list ──
+function addItemToList() {
+    if (!selectedProduct) {
+        searchInput.focus();
+        return;
+    }
+    const qty = parseInt(addQty.value) || 1;
+    const price = parseFloat(addPrice.value) || 0;
+
+    // Check if product already in list — increment qty
+    const existingRow = body.querySelector(`tr[data-product-id="${selectedProduct.id}"]`);
+    if (existingRow) {
+        const qtyInput = existingRow.querySelector('.qty-input');
+        const priceInput = existingRow.querySelector('.price-input');
+        qtyInput.value = parseInt(qtyInput.value) + qty;
+        priceInput.value = price.toFixed(2);
+        recalcRow(existingRow);
+    } else {
+        addRow(selectedProduct, qty, price);
+    }
+
+    searchInput.value = '';
+    selectedProduct = null;
+    selectedIdInput.value = '';
+    addQty.value = '1';
+    addPrice.value = '0';
+    searchInput.focus();
+    updateNoItemsMsg();
+}
+
+addBtn.addEventListener('click', addItemToList);
+addQty.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addItemToList(); } });
+addPrice.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addItemToList(); } });
+
+// ── List row management ──
+function addRow(product, qty, price) {
     const row = document.createElement('tr');
+    row.dataset.productId = product.id;
     row.innerHTML = `
-        <td><select name="product_id[]" class="product-select" required>${productOptions()}</select></td>
-        <td class="stock-cell text-muted">—</td>
-        <td><input type="number" name="qty[]" min="1" value="1" class="qty-input" required></td>
-        <td><input type="number" name="unit_price[]" min="0" step="0.01" value="0" class="price-input" required></td>
-        <td class="line-subtotal">$0.00</td>
-        <td><span class="remove-row" title="Remove line">&times;</span></td>
+        <td class="product-name-cell">
+            <input type="hidden" name="product_id[]" value="${product.id}">
+            ${escHtml(product.name)} <span class="sku-label">[${escHtml(product.sku)}]</span>
+        </td>
+        <td class="stock-cell text-muted">${product.stock}</td>
+        <td><input type="number" name="qty[]" min="1" max="${product.stock}" value="${qty}" class="qty-input" required></td>
+        <td><input type="number" name="unit_price[]" min="0" step="0.01" value="${price.toFixed(2)}" class="price-input" required></td>
+        <td class="line-subtotal">$${(qty * price).toFixed(2)}</td>
+        <td><span class="remove-row" title="Remove item">&times;</span></td>
     `;
     body.appendChild(row);
     attachRowEvents(row);
@@ -78,23 +323,12 @@ function addRow() {
 }
 
 function attachRowEvents(row) {
-    const select = row.querySelector('.product-select');
     const qty = row.querySelector('.qty-input');
     const price = row.querySelector('.price-input');
     const remove = row.querySelector('.remove-row');
-    const stockCell = row.querySelector('.stock-cell');
-
-    select.addEventListener('change', () => {
-        const opt = select.options[select.selectedIndex];
-        price.value = opt.dataset.price || 0;
-        const stock = opt.dataset.stock || 0;
-        stockCell.textContent = stock;
-        qty.setAttribute('max', stock);
-        recalcRow(row);
-    });
     qty.addEventListener('input', () => recalcRow(row));
     price.addEventListener('input', () => recalcRow(row));
-    remove.addEventListener('click', () => { row.remove(); recalcTotal(); });
+    remove.addEventListener('click', () => { row.remove(); recalcTotal(); updateNoItemsMsg(); });
 }
 
 function recalcRow(row) {
@@ -102,17 +336,16 @@ function recalcRow(row) {
     const price = parseFloat(row.querySelector('.price-input').value) || 0;
     row.querySelector('.line-subtotal').textContent = '$' + (qty * price).toFixed(2);
 
-    // gentle client-side warning if over available stock (server still enforces it)
-    const select = row.querySelector('.product-select');
-    const stock = parseFloat(select.options[select.selectedIndex]?.dataset.stock) || 0;
-    row.querySelector('.qty-input').style.borderColor = (qty > stock && stock > 0) ? '#dc2626' : '';
+    // stock warning
+    const maxQty = parseFloat(row.querySelector('.qty-input').getAttribute('max')) || 0;
+    row.querySelector('.qty-input').style.borderColor = (qty > maxQty && maxQty > 0) ? '#dc2626' : '';
 
     recalcTotal();
 }
 
 function recalcTotal() {
     let total = 0;
-    document.querySelectorAll('#items-body tr').forEach(row => {
+    body.querySelectorAll('tr').forEach(row => {
         const qty = parseFloat(row.querySelector('.qty-input')?.value) || 0;
         const price = parseFloat(row.querySelector('.price-input')?.value) || 0;
         total += qty * price;
@@ -120,6 +353,15 @@ function recalcTotal() {
     document.getElementById('grand-total').textContent = total.toFixed(2);
 }
 
-document.getElementById('add-row').addEventListener('click', addRow);
-addRow(); // start with one line
+function updateNoItemsMsg() {
+    noItemsMsg.style.display = body.children.length === 0 ? '' : 'none';
+}
+
+function escHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+}
+
+updateNoItemsMsg();
 </script>

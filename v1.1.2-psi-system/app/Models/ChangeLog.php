@@ -109,6 +109,60 @@ class ChangeLog extends Model
         return self::raw($sql, [$limit]);
     }
 
+    /** Paginated version of getAllRecentChanges. */
+    public static function getAllPaginated(int $page = 1, int $perPage = 20): array
+    {
+        $countStmt = self::db()->prepare('SELECT COUNT(*) FROM change_logs');
+        $countStmt->execute();
+        $total = (int) $countStmt->fetchColumn();
+
+        $pages = max(1, (int) ceil($total / $perPage));
+        $page = max(1, min($page, $pages));
+        $offset = ($page - 1) * $perPage;
+
+        $dataStmt = self::db()->prepare(
+            'SELECT cl.*, u.name as user_name
+             FROM change_logs cl
+             LEFT JOIN users u ON u.id = cl.user_id
+             ORDER BY cl.created_at DESC
+             LIMIT :limit OFFSET :offset'
+        );
+        $dataStmt->bindValue(':limit', $perPage, \PDO::PARAM_INT);
+        $dataStmt->bindValue(':offset', $offset, \PDO::PARAM_INT);
+        $dataStmt->execute();
+        $rows = $dataStmt->fetchAll();
+
+        return ['rows' => $rows, 'total' => $total, 'page' => $page, 'perPage' => $perPage, 'pages' => $pages];
+    }
+
+    /** Paginated version of getRecentChanges (by table). */
+    public static function getRecentChangesPaginated(string $tableName, int $page = 1, int $perPage = 20): array
+    {
+        $countStmt = self::db()->prepare('SELECT COUNT(*) FROM change_logs WHERE table_name = ?');
+        $countStmt->execute([$tableName]);
+        $total = (int) $countStmt->fetchColumn();
+
+        $pages = max(1, (int) ceil($total / $perPage));
+        $page = max(1, min($page, $pages));
+        $offset = ($page - 1) * $perPage;
+
+        $dataStmt = self::db()->prepare(
+            'SELECT cl.*, u.name as user_name
+             FROM change_logs cl
+             LEFT JOIN users u ON u.id = cl.user_id
+             WHERE cl.table_name = ?
+             ORDER BY cl.created_at DESC
+             LIMIT :limit OFFSET :offset'
+        );
+        $dataStmt->bindValue(1, $tableName);
+        $dataStmt->bindValue(':limit', $perPage, \PDO::PARAM_INT);
+        $dataStmt->bindValue(':offset', $offset, \PDO::PARAM_INT);
+        $dataStmt->execute();
+        $rows = $dataStmt->fetchAll();
+
+        return ['rows' => $rows, 'total' => $total, 'page' => $page, 'perPage' => $perPage, 'pages' => $pages];
+    }
+
     /**
      * 解析JSON数据
      * 

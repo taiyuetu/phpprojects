@@ -19,12 +19,16 @@ class SupplierController extends Controller
     public function index(): void
     {
         $filters = ['q' => trim($this->input('q', ''))] + $this->customFieldFilters(Supplier::customFields());
+        $page = max(1, (int) $this->input('page', 1));
+
+        $result = Supplier::filterWithCustomFieldsPaginated($filters, ['name', 'phone', 'email'], 'name', $page);
 
         $this->view('suppliers/index', [
             'title'        => 'Suppliers',
-            'suppliers'    => Supplier::filterWithCustomFields($filters, ['name', 'phone', 'email'], 'name'),
+            'suppliers'    => $result['rows'],
             'customFields' => Supplier::customFields(),
             'filters'      => $filters,
+            'pagination'   => $result,
         ]);
     }
 

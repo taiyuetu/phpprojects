@@ -10,12 +10,16 @@ class CategoryController extends Controller
     public function index(): void
     {
         $filters = ['q' => trim($this->input('q', ''))] + $this->customFieldFilters(Category::customFields());
+        $page = max(1, (int) $this->input('page', 1));
+
+        $result = Category::filterWithCustomFieldsPaginated($filters, ['name'], 'name', $page);
 
         $this->view('categories/index', [
             'title'        => 'Categories',
-            'categories'   => Category::filterWithCustomFields($filters, ['name'], 'name'),
+            'categories'   => $result['rows'],
             'customFields' => Category::customFields(),
             'filters'      => $filters,
+            'pagination'   => $result,
         ]);
     }
 

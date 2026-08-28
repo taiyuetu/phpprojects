@@ -19,12 +19,16 @@ class CustomerController extends Controller
     public function index(): void
     {
         $filters = ['q' => trim($this->input('q', ''))] + $this->customFieldFilters(Customer::customFields());
+        $page = max(1, (int) $this->input('page', 1));
+
+        $result = Customer::filterWithCustomFieldsPaginated($filters, ['name', 'phone', 'email'], 'name', $page);
 
         $this->view('customers/index', [
             'title'        => 'Customers',
-            'customers'    => Customer::filterWithCustomFields($filters, ['name', 'phone', 'email'], 'name'),
+            'customers'    => $result['rows'],
             'customFields' => Customer::customFields(),
             'filters'      => $filters,
+            'pagination'   => $result,
         ]);
     }
 

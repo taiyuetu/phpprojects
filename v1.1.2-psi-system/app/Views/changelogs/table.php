@@ -61,5 +61,6 @@
         </tbody>
     </table>
     </div>
+    <?php include __DIR__ . '/../partials/pagination.php'; ?>
     <?php endif; ?>
 </div>

@@ -446,3 +446,51 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
     padding: 7px 12px;
     font-size: 0.85rem;
 }
+
+/* ── Pagination ── */
+.pagination-wrap {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #e5e7eb;
+}
+.pagination-info {
+    font-size: .85rem;
+    color: #6b7280;
+}
+.pagination {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+.page-link {
+    display: inline-block;
+    min-width: 32px;
+    height: 32px;
+    line-height: 32px;
+    text-align: center;
+    font-size: .85rem;
+    border-radius: 6px;
+    text-decoration: none;
+    color: #374151;
+    background: #f3f4f6;
+    padding: 0 6px;
+}
+.page-link:hover:not(.disabled):not(.active) {
+    background: #e5e7eb;
+}
+.page-link.active {
+    background: #2563eb;
+    color: #fff;
+    font-weight: 600;
+}
+.page-link.disabled {
+    color: #d1d5db;
+    cursor: default;
+}
+.page-ellipsis {
+    color: #9ca3af;
+    padding: 0 2px;
+}

@@ -12,10 +12,19 @@ class SaleController extends Controller
     public function index(): void
     {
         $q = trim($this->input('q', ''));
+        $dateFrom = trim($this->input('date_from', ''));
+        $dateTo   = trim($this->input('date_to', ''));
+        $page = max(1, (int) $this->input('page', 1));
+
+        $result = Sale::filterPaginated($q, $dateFrom, $dateTo, $page);
+
         $this->view('sales/index', [
-            'title' => 'Sales',
-            'sales' => $q !== '' ? Sale::searchWithCustomer($q) : Sale::allWithCustomer(),
-            'q'     => $q,
+            'title'     => 'Sales',
+            'sales'     => $result['rows'],
+            'q'         => $q,
+            'date_from' => $dateFrom,
+            'date_to'   => $dateTo,
+            'pagination' => $result,
         ]);
     }
 

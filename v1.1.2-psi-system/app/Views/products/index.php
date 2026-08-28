@@ -94,6 +94,7 @@ $hasFilter = count(array_filter($filters, fn($v) => $v !== '')) > 0;
         </tbody>
     </table>
     </div>
+    <?php include __DIR__ . '/../partials/pagination.php'; ?>
     <?php endif; ?>
 </div>
 

@@ -14,9 +14,13 @@ class ChangeLogController extends Controller
      */
     public function index(): void
     {
+        $page = max(1, (int) $this->input('page', 1));
+        $result = ChangeLog::getAllPaginated($page);
+
         $this->view('changelogs/index', [
-            'title'   => '系统变更日志',
-            'changes' => ChangeLog::getAllRecentChanges(100),
+            'title'      => '系统变更日志',
+            'changes'    => $result['rows'],
+            'pagination' => $result,
         ]);
     }
 
@@ -25,10 +29,14 @@ class ChangeLogController extends Controller
      */
     public function table(string $tableName): void
     {
+        $page = max(1, (int) $this->input('page', 1));
+        $result = ChangeLog::getRecentChangesPaginated($tableName, $page);
+
         $this->view('changelogs/table', [
-            'title'     => ucfirst($tableName) . ' 变更历史',
-            'tableName' => $tableName,
-            'changes'   => ChangeLog::getRecentChanges($tableName, 100),
+            'title'      => ucfirst($tableName) . ' 变更历史',
+            'tableName'  => $tableName,
+            'changes'    => $result['rows'],
+            'pagination' => $result,
         ]);
     }
 

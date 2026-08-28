@@ -18,17 +18,91 @@ class Purchase extends Model
         );
     }
 
-    /** Search purchases by invoice_no or supplier name. */
-    public static function searchWithSupplier(string $query): array
+    /** Search purchases by invoice_no or supplier name, with optional date range. */
+    public static function searchWithSupplier(string $query, string $dateFrom = '', string $dateTo = ''): array
     {
-        return self::raw(
-            'SELECT pu.*, s.name AS supplier_name
-             FROM purchases pu
-             JOIN suppliers s ON s.id = pu.supplier_id
-             WHERE pu.invoice_no LIKE :q OR s.name LIKE :q
-             ORDER BY pu.purchase_date DESC, pu.id DESC',
-            ['q' => '%' . $query . '%']
-        );
+        $sql = 'SELECT pu.*, s.name AS supplier_name
+                FROM purchases pu
+                JOIN suppliers s ON s.id = pu.supplier_id
+                WHERE (pu.invoice_no LIKE :q OR s.name LIKE :q)';
+        $params = ['q' => '%' . $query . '%'];
+
+        if ($dateFrom !== '') {
+            $sql .= ' AND pu.purchase_date >= :date_from';
+            $params['date_from'] = $dateFrom;
+        }
+        if ($dateTo !== '') {
+            $sql .= ' AND pu.purchase_date <= :date_to';
+            $params['date_to'] = $dateTo;
+        }
+
+        $sql .= ' ORDER BY pu.purchase_date DESC, pu.id DESC';
+        return self::raw($sql, $params);
+    }
+
+    /** All purchases with supplier, filtered by optional date range. */
+    public static function allWithSupplierFiltered(string $dateFrom = '', string $dateTo = ''): array
+    {
+        $sql = 'SELECT pu.*, s.name AS supplier_name
+                FROM purchases pu
+                JOIN suppliers s ON s.id = pu.supplier_id
+                WHERE 1 = 1';
+        $params = [];
+
+        if ($dateFrom !== '') {
+            $sql .= ' AND pu.purchase_date >= :date_from';
+            $params['date_from'] = $dateFrom;
+        }
+        if ($dateTo !== '') {
+            $sql .= ' AND pu.purchase_date <= :date_to';
+            $params['date_to'] = $dateTo;
+        }
+
+        $sql .= ' ORDER BY pu.purchase_date DESC, pu.id DESC';
+        return self::raw($sql, $params);
+    }
+
+    /** Paginated version of searchWithSupplier / allWithSupplierFiltered. */
+    public static function filterPaginated(string $query = '', string $dateFrom = '', string $dateTo = '', int $page = 1, int $perPage = 20): array
+    {
+        $where = ' WHERE 1 = 1';
+        $params = [];
+
+        if ($query !== '') {
+            $where .= ' AND (pu.invoice_no LIKE :q OR s.name LIKE :q)';
+            $params['q'] = '%' . $query . '%';
+        }
+        if ($dateFrom !== '') {
+            $where .= ' AND pu.purchase_date >= :date_from';
+            $params['date_from'] = $dateFrom;
+        }
+        if ($dateTo !== '') {
+            $where .= ' AND pu.purchase_date <= :date_to';
+            $params['date_to'] = $dateTo;
+        }
+
+        $join = 'FROM purchases pu JOIN suppliers s ON s.id = pu.supplier_id';
+
+        $countStmt = self::db()->prepare('SELECT COUNT(*) ' . $join . $where);
+        $countStmt->execute($params);
+        $total = (int) $countStmt->fetchColumn();
+
+        $pages = max(1, (int) ceil($total / $perPage));
+        $page = max(1, min($page, $pages));
+        $offset = ($page - 1) * $perPage;
+
+        $dataSql = 'SELECT pu.*, s.name AS supplier_name ' . $join . $where
+                   . ' ORDER BY pu.purchase_date DESC, pu.id DESC LIMIT :limit OFFSET :offset';
+        $dataStmt = self::db()->prepare($dataSql);
+        foreach ($params as $k => $v) {
+            $dataStmt->bindValue(':' . $k, $v);
+        }
+        $dataStmt->bindValue(':limit', $perPage, \PDO::PARAM_INT);
+        $dataStmt->bindValue(':offset', $offset, \PDO::PARAM_INT);
+        $dataStmt->execute();
+        $rows = $dataStmt->fetchAll();
+
+        return ['rows' => $rows, 'total' => $total, 'page' => $page, 'perPage' => $perPage, 'pages' => $pages];
     }
 
     public static function withItems(int $id): ?array
