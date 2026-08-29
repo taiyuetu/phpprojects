@@ -8,9 +8,97 @@
         <a href="<?= Router::url('/purchases') ?>" class="btn btn-secondary btn-sm">&larr; All Purchases</a>
     </div>
 
-    <div class="table-wrap" style="margin-top:16px;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:16px;padding:14px;background:#f9fafb;border-radius:8px;">
+        <div>
+            <div style="font-size:.8rem;color:#6b7280;">Purchase Date (下单日期)</div>
+            <div style="font-weight:500;"><?= htmlspecialchars($purchase['purchase_date']) ?></div>
+        </div>
+        <div>
+            <div style="font-size:.8rem;color:#6b7280;">Expected Arrival (预计到货)</div>
+            <div style="font-weight:500;"><?= $purchase['expected_arrival_date'] ? htmlspecialchars($purchase['expected_arrival_date']) : '<span style="color:#9ca3af;">—</span>' ?></div>
+        </div>
+        <div>
+            <div style="font-size:.8rem;color:#6b7280;">Total Arrived (累计到货)</div>
+            <div style="font-weight:500;color:#059669;"><?= (int)$purchase['total_arrived_qty'] ?> units</div>
+        </div>
+    </div>
+    <?php if (!empty($purchase['notes'])): ?>
+    <div style="margin-top:12px;padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;">
+        <div style="font-size:.8rem;color:#92400e;font-weight:600;margin-bottom:4px;">Notes (备注)</div>
+        <div style="color:#78350f;"><?= nl2br(htmlspecialchars($purchase['notes'])) ?></div>
+    </div>
+    <?php endif; ?>
+
+    <!-- Record New Arrival Form -->
+    <div style="margin-top:20px;padding:16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;">
+        <h3 style="margin-top:0;margin-bottom:12px;font-size:1rem;color:#0369a1;">📦 Record Arrival (记录到货)</h3>
+        <form method="post" action="<?= Router::url('/purchases/' . $purchase['id'] . '/arrival') ?>">
+            <?= $this->csrfField() ?>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
+                <div class="form-group">
+                    <label style="font-size:.85rem;color:#374151;">Arrival Date (到货日期)</label>
+                    <input type="date" name="arrival_date" value="<?= date('Y-m-d') ?>" required>
+                </div>
+                <div class="form-group">
+                    <label style="font-size:.85rem;color:#374151;">Arrival Qty (到货数量)</label>
+                    <input type="number" name="qty" min="1" value="1" required>
+                </div>
+                <div class="form-group">
+                    <label style="font-size:.85rem;color:#374151;">Notes (备注)</label>
+                    <input type="text" name="notes" placeholder="Optional notes...">
+                </div>
+            </div>
+            <div style="margin-top:12px;">
+                <button type="submit" class="btn btn-primary">Record Arrival</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Arrival History -->
+    <?php if (!empty($purchase['arrivals'])): ?>
+    <div style="margin-top:20px;">
+        <h3 style="margin-bottom:12px;font-size:1rem;">📋 Arrival History (到货记录)</h3>
+        <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Arrival Date</th>
+                    <th class="text-right">Qty</th>
+                    <th>Notes</th>
+                    <th>Recorded By</th>
+                    <th>Created At</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($purchase['arrivals'] as $idx => $arrival): ?>
+                <tr>
+                    <td class="text-muted"><?= $idx + 1 ?></td>
+                    <td><?= htmlspecialchars($arrival['arrival_date']) ?></td>
+                    <td class="text-right" style="font-weight:500;color:#059669;">+<?= (int)$arrival['qty'] ?></td>
+                    <td class="text-muted"><?= htmlspecialchars($arrival['notes'] ?? '') ?></td>
+                    <td class="text-muted"><?= htmlspecialchars($arrival['created_by_name'] ?? '—') ?></td>
+                    <td class="text-muted" style="font-size:.85rem;"><?= htmlspecialchars($arrival['created_at']) ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="2" class="text-right"><strong>Total Arrived</strong></td>
+                    <td class="text-right" style="font-weight:700;color:#059669;"><?= (int)$purchase['total_arrived_qty'] ?></td>
+                    <td colspan="3"></td>
+                </tr>
+            </tfoot>
+        </table>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <!-- Purchase Items -->
+    <div class="table-wrap" style="margin-top:20px;">
+    <h3 style="margin-bottom:12px;font-size:1rem;">📝 Purchase Items (采购明细)</h3>
     <table>
-        <thead><tr><th>SKU</th><th>Product</th><th class="text-right">Qty</th><th class="text-right">Unit Cost</th><th class="text-right">Subtotal</th></tr></thead>
+        <thead><tr><th>SKU</th><th>Product</th><th class="text-right">Ordered Qty</th><th class="text-right">Unit Cost</th><th class="text-right">Subtotal</th></tr></thead>
         <tbody>
         <?php foreach ($purchase['items'] as $item): ?>
             <tr>

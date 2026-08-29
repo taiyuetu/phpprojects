@@ -22,13 +22,14 @@
     <?php else: ?>
     <div class="table-wrap">
     <table>
-        <thead><tr><th>Invoice #</th><th>Supplier</th><th>Date</th><th class="text-right">Total</th><th></th></tr></thead>
+        <thead><tr><th>Invoice #</th><th>Supplier</th><th>Date</th><th>Arrived Qty</th><th class="text-right">Total</th><th></th></tr></thead>
         <tbody>
         <?php foreach ($purchases as $p): ?>
             <tr>
                 <td><a href="<?= Router::url('/purchases/' . $p['id']) ?>"><?= htmlspecialchars($p['invoice_no']) ?></a></td>
                 <td><?= htmlspecialchars($p['supplier_name']) ?></td>
                 <td class="text-muted"><?= htmlspecialchars($p['purchase_date']) ?></td>
+                <td class="text-muted"><?= $p['total_arrived_qty'] ? (int)$p['total_arrived_qty'] . ' units' : '—' ?></td>
                 <td class="text-right">$<?= number_format($p['total'], 2) ?></td>
                 <td><a href="<?= Router::url('/purchases/' . $p['id']) ?>" class="btn btn-secondary btn-sm">View</a></td>
             </tr>

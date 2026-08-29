@@ -6,7 +6,7 @@ use App\Core\Model;
 class Purchase extends Model
 {
     protected static string $table = 'purchases';
-    protected static array $fillable = ['invoice_no', 'supplier_id', 'purchase_date', 'total', 'created_by'];
+    protected static array $fillable = ['invoice_no', 'supplier_id', 'purchase_date', 'expected_arrival_date', 'notes', 'total', 'created_by'];
 
     public static function allWithSupplier(): array
     {
@@ -91,7 +91,9 @@ class Purchase extends Model
         $page = max(1, min($page, $pages));
         $offset = ($page - 1) * $perPage;
 
-        $dataSql = 'SELECT pu.*, s.name AS supplier_name ' . $join . $where
+        $dataSql = 'SELECT pu.*, s.name AS supplier_name, 
+                    (SELECT COALESCE(SUM(pa.qty), 0) FROM purchase_arrivals pa WHERE pa.purchase_id = pu.id) AS total_arrived_qty
+                    ' . $join . $where
                    . ' ORDER BY pu.purchase_date DESC, pu.id DESC LIMIT :limit OFFSET :offset';
         $dataStmt = self::db()->prepare($dataSql);
         foreach ($params as $k => $v) {
@@ -124,12 +126,15 @@ class Purchase extends Model
 
         $purchase = $purchase[0];
         $purchase['items'] = $items;
+        $purchase['arrivals'] = PurchaseArrival::byPurchase($id);
+        $purchase['total_arrived_qty'] = PurchaseArrival::totalArrivedQty($id);
         return $purchase;
     }
 
     /**
      * Create a purchase with its line items, in one atomic operation:
-     * insert header, insert each item, and bump product stock for each.
+     * insert header and each item. Stock is NOT increased here —
+     * stock will be increased when actual arrival qty is confirmed.
      * $items = [['product_id'=>.., 'qty'=>.., 'unit_cost'=>..], ...]
      */
     public static function createWithItems(array $header, array $items): int
@@ -153,14 +158,6 @@ class Purchase extends Model
                     'INSERT INTO purchase_items (purchase_id, product_id, qty, unit_cost, subtotal)
                      VALUES (?,?,?,?,?)'
                 )->execute([$purchaseId, $item['product_id'], $item['qty'], $item['unit_cost'], $subtotal]);
-
-                Product::increaseStock(
-                    $item['product_id'],
-                    $item['qty'],
-                    'purchase',
-                    $header['invoice_no'],
-                    'Purchase #' . $header['invoice_no']
-                );
             }
 
             $db->commit();

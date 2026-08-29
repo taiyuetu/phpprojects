@@ -54,14 +54,28 @@ CREATE TABLE IF NOT EXISTS products (
 );
 
 CREATE TABLE IF NOT EXISTS purchases (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    invoice_no  TEXT NOT NULL UNIQUE,
-    supplier_id INTEGER NOT NULL,
-    purchase_date TEXT NOT NULL,
-    total       REAL NOT NULL DEFAULT 0,
-    created_by  INTEGER,
-    created_at  TEXT DEFAULT CURRENT_TIMESTAMP,
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_no            TEXT NOT NULL UNIQUE,
+    supplier_id           INTEGER NOT NULL,
+    purchase_date         TEXT NOT NULL,
+    expected_arrival_date TEXT,
+    notes                 TEXT DEFAULT '',
+    total                 REAL NOT NULL DEFAULT 0,
+    created_by            INTEGER,
+    created_at            TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id),
+    FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS purchase_arrivals (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    purchase_id   INTEGER NOT NULL,
+    arrival_date  TEXT NOT NULL,
+    qty           INTEGER NOT NULL,
+    notes         TEXT DEFAULT '',
+    created_by    INTEGER,
+    created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE CASCADE,
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
 

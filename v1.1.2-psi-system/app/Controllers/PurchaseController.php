@@ -62,15 +62,19 @@ class PurchaseController extends Controller
         }
 
         $header = [
-            'invoice_no'    => trim($this->input('invoice_no')),
-            'supplier_id'   => (int) $this->input('supplier_id'),
-            'purchase_date' => $this->input('purchase_date', date('Y-m-d')),
-            'created_by'    => Auth::user()['id'] ?? null,
+            'invoice_no'            => trim($this->input('invoice_no')),
+            'supplier_id'           => (int) $this->input('supplier_id'),
+            'purchase_date'         => $this->input('purchase_date', date('Y-m-d')),
+            'expected_arrival_date' => $this->input('expected_arrival_date') ?: null,
+            'actual_arrival_date'   => $this->input('actual_arrival_date') ?: null,
+            'actual_arrival_qty'    => (int) $this->input('actual_arrival_qty', 0),
+            'notes'                 => trim($this->input('notes', '')),
+            'created_by'            => Auth::user()['id'] ?? null,
         ];
 
         try {
             $id = Purchase::createWithItems($header, $items);
-            $this->flash('success', 'Purchase recorded and stock updated.');
+            $this->flash('success', 'Purchase recorded. Please confirm arrival to update stock.');
             $this->redirect('/purchases/' . $id);
         } catch (\Throwable $e) {
             $this->flash('error', 'Could not save purchase: ' . $e->getMessage());
@@ -84,5 +88,34 @@ class PurchaseController extends Controller
         if (!$purchase) { $this->flash('error', 'Purchase not found.'); $this->redirect('/purchases'); }
 
         $this->view('purchases/show', ['title' => 'Purchase #' . $purchase['invoice_no'], 'purchase' => $purchase]);
+    }
+
+    public function recordArrival(string $id): void
+    {
+        $this->verifyCsrf();
+
+        $purchase = Purchase::find((int) $id);
+        if (!$purchase) {
+            $this->flash('error', 'Purchase not found.');
+            $this->redirect('/purchases');
+        }
+
+        $arrivalDate = $this->input('arrival_date', date('Y-m-d'));
+        $qty = (int) $this->input('qty', 0);
+        $notes = trim($this->input('notes', ''));
+
+        if ($qty <= 0) {
+            $this->flash('error', 'Arrival qty must be greater than 0.');
+            $this->redirect('/purchases/' . $id);
+        }
+
+        try {
+            PurchaseArrival::recordArrival((int) $id, $arrivalDate, $qty, $notes);
+            $this->flash('success', 'Arrival recorded! Stock updated by ' . $qty . ' units.');
+            $this->redirect('/purchases/' . $id);
+        } catch (\Throwable $e) {
+            $this->flash('error', 'Could not record arrival: ' . $e->getMessage());
+            $this->redirect('/purchases/' . $id);
+        }
     }
 }

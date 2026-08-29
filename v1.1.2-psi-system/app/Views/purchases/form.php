@@ -89,8 +89,28 @@
                 </select>
             </div>
             <div class="form-group">
-                <label>Purchase Date</label>
+                <label>Purchase Date (下单日期)</label>
                 <input type="date" name="purchase_date" value="<?= date('Y-m-d') ?>" required>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Expected Arrival Date (预计到货日期)</label>
+                <input type="date" name="expected_arrival_date">
+            </div>
+            <div class="form-group">
+                <label>Actual Arrival Date (实际到货日期)</label>
+                <input type="date" name="actual_arrival_date">
+            </div>
+            <div class="form-group">
+                <label>Actual Arrival Qty (实际到货数量)</label>
+                <input type="number" name="actual_arrival_qty" min="0" value="0">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group" style="flex:1;">
+                <label>Notes (备注信息)</label>
+                <textarea name="notes" rows="3" placeholder="Enter any notes or remarks..."></textarea>
             </div>
         </div>
 

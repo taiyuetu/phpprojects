@@ -61,6 +61,7 @@ Router::get('/purchases', 'PurchaseController@index');
 Router::get('/purchases/create', 'PurchaseController@create');
 Router::post('/purchases', 'PurchaseController@store');
 Router::get('/purchases/{id}', 'PurchaseController@show');
+Router::post('/purchases/{id}/arrival', 'PurchaseController@recordArrival');
 
 // Sales
 Router::get('/sales', 'SaleController@index');
