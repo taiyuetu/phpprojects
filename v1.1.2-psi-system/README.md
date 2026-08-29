@@ -11,7 +11,9 @@ no Composer, no framework lock-in, just plain PHP organized the right way.
 - **Dashboard** — revenue, spend, stock value, low-stock alerts, recent stock movements
 - **Products** — full CRUD, SKU, category, cost/sale price, reorder level, per-product stock history
 - **Categories, Suppliers, Customers** — simple CRUD masters
-- **Purchases** — multi-line purchase orders; stock automatically increases on save
+- **Purchases** — multi-line purchase orders with expected arrival date and notes;
+  supports **partial arrivals** — record multiple arrivals over time, each
+  automatically updating product stock. Full arrival history is tracked per order.
 - **Sales** — multi-line sales invoices; stock automatically decreases on save, with
   server-side validation that blocks overselling (atomic DB transaction, rolls back on failure)
 - **Inventory Ledger** — full audit trail of every stock movement (purchase / sale / manual adjustment)
@@ -90,11 +92,12 @@ psi-system/
   shape. Once you understand one, you understand all of them — and adding
   a new master-data type is a copy-paste-rename exercise.
 - **Single source of truth for stock.** All stock changes — whether from a
-  purchase, a sale, or a manual product edit — flow through
+  purchase arrival, a sale, or a manual product edit — flow through
   `Product::increaseStock()` / `Product::decreaseStock()`, which always
   write a row to `inventory_transactions`. That's what powers the ledger,
   the dashboard's "recent movements," and the per-product history — for free,
-  from one code path.
+  from one code path. Purchase arrivals are tracked separately in
+  `purchase_arrivals`, allowing multiple partial deliveries per order.
 - **Plain SQL, no ORM magic.** `Model::raw()` lets any model run a hand-written
   query for joins/aggregates without fighting a query builder. You can always
   see exactly what SQL runs.
