@@ -5,6 +5,39 @@ All notable changes to the PSI System are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-08-29
+
+### Added
+- **Purchase Order arrival tracking** — added new fields to Purchase Orders:
+  - Expected Arrival Date (预计到货日期)
+  - Notes (备注信息)
+- **Partial arrival support** — new `purchase_arrivals` table to record multiple
+  arrivals per Purchase Order. Each arrival records the date, quantity, notes,
+  and the user who recorded it. Product stock is updated automatically with
+  each arrival.
+- **Arrival history view** — Purchase Order detail page now shows a complete
+  arrival history table with all recorded arrivals, plus a form to record new
+  arrivals.
+- **Arrived Qty column** on Purchase Orders list page showing cumulative
+  arrived quantity for each order.
+- **PurchaseItem model** — new model for purchase line items with
+  `byPurchase()` helper.
+- **PurchaseArrival model** — new model with `byPurchase()`,
+  `totalArrivedQty()`, and `recordArrival()` methods. The `recordArrival()`
+  method handles stock updates atomically in a transaction.
+
+### Changed
+- **Stock update logic** — product stock is no longer increased when a Purchase
+  Order is created. Stock is only increased when arrivals are recorded,
+  following the actual business flow (order → receive → update stock).
+- `Purchase::withItems()` now includes `arrivals` and `total_arrived_qty` data.
+- `Purchase::filterPaginated()` includes a subquery for `total_arrived_qty`.
+- Purchase Order form labels now include Chinese translations for clarity.
+
+### Database
+- Added `purchase_arrivals` table with foreign keys to `purchases` and `users`.
+- Migration script: `database/add_purchase_arrivals.php`
+
 ## [1.3.0] - 2026-08-28
 
 ### Added
