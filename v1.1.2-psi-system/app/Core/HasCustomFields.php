@@ -12,8 +12,9 @@ namespace App\Core;
  * Field definition shape:
  *   'key' => [
  *       'label'      => 'Human label',
- *       'type'       => 'text' | 'select' | 'upload',
+ *       'type'       => 'text' | 'textarea' | 'select' | 'date' | 'upload',
  *       'filterable' => true,                 // show in list filter form
+ *       'required'   => false,                // validate on save (server-side)
  *       'options'    => ['a', 'b'],           // for select only
  *   ]
  */
@@ -36,6 +37,61 @@ trait HasCustomFields
     {
         $decoded = json_decode($json ?? '{}', true);
         return is_array($decoded) ? $decoded : [];
+    }
+
+    /**
+     * Validate custom field values against their definitions.
+     * Returns an array of error messages (empty = valid).
+     *
+     * @param array $values  Key => value pairs submitted (cf_* collected values).
+     * @return string[]      List of human-readable error messages.
+     */
+    public static function validateCustomFields(array $values): array
+    {
+        $errors = [];
+        foreach (static::customFields() as $key => $def) {
+            $type = $def['type'] ?? 'text';
+            $label = $def['label'] ?? $key;
+
+            // Required check (skip upload fields — they're validated separately)
+            if (!empty($def['required']) && $type !== 'upload') {
+                $v = $values[$key] ?? '';
+                if (is_string($v) && trim($v) === '') {
+                    $errors[] = "{$label} is required.";
+                }
+            }
+
+            // Date format check
+            if ($type === 'date' && !empty($values[$key])) {
+                $v = trim((string) $values[$key]);
+                if ($v !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) {
+                    $errors[] = "{$label} must be a valid date (YYYY-MM-DD).";
+                }
+            }
+
+            // Select: must be one of the options (when required or non-empty)
+            if ($type === 'select' && !empty($values[$key]) && !empty($def['options'])) {
+                if (!in_array($values[$key], $def['options'], true)) {
+                    $errors[] = "{$label} must be one of: " . implode(', ', $def['options']) . '.';
+                }
+            }
+        }
+
+        // Upload required check: look for existing value or new upload
+        if (!empty($_FILES)) {
+            foreach (static::customFields() as $key => $def) {
+                if (($def['type'] ?? 'text') === 'upload' && !empty($def['required'])) {
+                    $hasExisting = !empty($values[$key]);
+                    $hasUpload = !empty($_FILES['cf_' . $key]) && $_FILES['cf_' . $key]['error'] === UPLOAD_ERR_OK;
+                    $deleting = !empty($_POST['cf_' . $key . '_delete']);
+                    if (!$hasExisting && !$hasUpload && !$deleting) {
+                        $errors[] = ($def['label'] ?? $key) . ' is required.';
+                    }
+                }
+            }
+        }
+
+        return $errors;
     }
 
     /**

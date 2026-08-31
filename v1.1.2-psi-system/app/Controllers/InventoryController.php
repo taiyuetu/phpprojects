@@ -18,6 +18,8 @@ class InventoryController extends Controller
             'title'        => 'Inventory Ledger',
             'transactions' => $result['rows'],
             'q'            => $q,
+            'customFields' => InventoryTransaction::customFields(),
+            'filters'      => ['q' => $q] + $this->customFieldFilters(InventoryTransaction::customFields()),
             'pagination'   => $result,
         ]);
     }

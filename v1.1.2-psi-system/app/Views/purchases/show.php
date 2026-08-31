@@ -1,4 +1,8 @@
-<?php use App\Core\Router; ?>
+<?php
+use App\Core\Router;
+$customFields = $customFields ?? [];
+$purchaseAttrs = json_decode($purchase['attributes'] ?? '{}', true) ?: [];
+?>
 <div class="card">
     <div style="display:flex;justify-content:space-between;">
         <div>
@@ -21,6 +25,27 @@
             <div style="font-size:.8rem;color:#6b7280;">Total Arrived (累计到货)</div>
             <div style="font-weight:500;color:#059669;"><?= (int)$purchase['total_arrived_qty'] ?> units</div>
         </div>
+        <?php if (!empty($customFields)): ?>
+            <?php foreach ($customFields as $key => $def): ?>
+                <?php $val = $purchaseAttrs[$key] ?? ''; if ($val === '') continue; ?>
+                <div>
+                    <div style="font-size:.8rem;color:#6b7280;"><?= htmlspecialchars($def['label']) ?></div>
+                    <div style="font-weight:500;">
+                        <?php if (($def['type'] ?? 'text') === 'upload'): ?>
+                            <?php if (preg_match('/\.(jpg|jpeg|png|gif|webp|bmp)$/i', $val)): ?>
+                                <img src="<?= Router::url('/' . $val) ?>" alt="" style="max-width:80px;max-height:50px;border-radius:3px;">
+                            <?php else: ?>
+                                <a href="<?= Router::url('/' . $val) ?>" target="_blank">📎 <?= htmlspecialchars(basename($val)) ?></a>
+                            <?php endif; ?>
+                        <?php elseif (($def['type'] ?? 'text') === 'textarea'): ?>
+                            <?= nl2br(htmlspecialchars($val)) ?>
+                        <?php else: ?>
+                            <?= htmlspecialchars($val) ?>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
     </div>
     <?php if (!empty($purchase['notes'])): ?>
     <div style="margin-top:12px;padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;">

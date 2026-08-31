@@ -16,25 +16,32 @@ class SaleController extends Controller
         $dateTo   = trim($this->input('date_to', ''));
         $page = max(1, (int) $this->input('page', 1));
 
-        $result = Sale::filterPaginated($q, $dateFrom, $dateTo, $page);
+        $filters = ['q' => $q, 'date_from' => $dateFrom, 'date_to' => $dateTo]
+                 + $this->customFieldFilters(Sale::customFields());
+
+        $cfFilters = $this->customFieldFilters(Sale::customFields());
+        $result = Sale::filterPaginated($q, $dateFrom, $dateTo, $page, 20, $cfFilters);
 
         $this->view('sales/index', [
-            'title'     => 'Sales',
-            'sales'     => $result['rows'],
-            'q'         => $q,
-            'date_from' => $dateFrom,
-            'date_to'   => $dateTo,
-            'pagination' => $result,
+            'title'        => 'Sales',
+            'sales'        => $result['rows'],
+            'q'            => $q,
+            'date_from'    => $dateFrom,
+            'date_to'      => $dateTo,
+            'customFields' => Sale::customFields(),
+            'filters'      => $filters,
+            'pagination'   => $result,
         ]);
     }
 
     public function create(): void
     {
         $this->view('sales/form', [
-            'title'     => 'New Sale',
-            'customers' => Customer::all('name'),
-            'products'  => Product::allWithCategory(),
-            'nextInvoice' => 'INV-' . date('Ymd') . '-' . str_pad((string)(Sale::count() + 1), 4, '0', STR_PAD_LEFT),
+            'title'        => 'New Sale',
+            'customers'    => Customer::all('name'),
+            'products'     => Product::allWithCategory(),
+            'nextInvoice'  => 'INV-' . date('Ymd') . '-' . str_pad((string)(Sale::count() + 1), 4, '0', STR_PAD_LEFT),
+            'customFields' => Sale::customFields(),
         ]);
     }
 
@@ -61,10 +68,15 @@ class SaleController extends Controller
             $this->redirect('/sales/create');
         }
 
+        // Collect and validate custom fields
+        $cfValues = $this->customFieldValues(Sale::customFields());
+        $this->validateCustomFieldsOrFail(Sale::class, $cfValues, '/sales/create');
+
         $header = [
             'invoice_no'  => trim($this->input('invoice_no')),
             'customer_id' => $this->input('customer_id') ?: null,
             'sale_date'   => $this->input('sale_date', date('Y-m-d')),
+            'attributes'  => json_encode($cfValues, JSON_UNESCAPED_UNICODE),
             'created_by'  => Auth::user()['id'] ?? null,
         ];
 
@@ -83,6 +95,10 @@ class SaleController extends Controller
         $sale = Sale::withItems((int) $id);
         if (!$sale) { $this->flash('error', 'Sale not found.'); $this->redirect('/sales'); }
 
-        $this->view('sales/show', ['title' => 'Sale #' . $sale['invoice_no'], 'sale' => $sale]);
+        $this->view('sales/show', [
+            'title'        => 'Sale #' . $sale['invoice_no'],
+            'sale'         => $sale,
+            'customFields' => Sale::customFields(),
+        ]);
     }
 }

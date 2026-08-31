@@ -71,6 +71,84 @@ abstract class Controller
         return $attrs;
     }
 
+    /**
+     * Validate custom-field values against their definitions.
+     * Returns an array of error messages (empty = valid).
+     *
+     * @param string $modelClass  Fully-qualified model class (e.g. Sale::class).
+     * @param array  $values      Collected custom-field values from customFieldValues().
+     * @param array  $existing    Existing custom-field values (for update; used for upload required checks).
+     * @return string[]           Error messages.
+     */
+    protected function validateCustomFields(string $modelClass, array $values, array $existing = []): array
+    {
+        // Merge existing for upload-required checks
+        $merged = array_merge($existing, $values);
+
+        $errors = [];
+        $customFields = $modelClass::customFields();
+
+        foreach ($customFields as $key => $def) {
+            $type = $def['type'] ?? 'text';
+            $label = $def['label'] ?? $key;
+
+            // Required check (skip upload fields — checked below)
+            if (!empty($def['required']) && $type !== 'upload') {
+                $v = $merged[$key] ?? '';
+                if (is_string($v) && trim($v) === '') {
+                    $errors[] = "{$label} is required.";
+                }
+            }
+
+            // Date format check
+            if ($type === 'date' && !empty($merged[$key])) {
+                $v = trim((string) $merged[$key]);
+                if ($v !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) {
+                    $errors[] = "{$label} must be a valid date (YYYY-MM-DD).";
+                }
+            }
+
+            // Select: must be one of the options
+            if ($type === 'select' && !empty($merged[$key]) && !empty($def['options'])) {
+                if (!in_array($merged[$key], $def['options'], true)) {
+                    $errors[] = "{$label} must be one of: " . implode(', ', $def['options']) . '.';
+                }
+            }
+        }
+
+        // Upload required check
+        foreach ($customFields as $key => $def) {
+            if (($def['type'] ?? 'text') === 'upload' && !empty($def['required'])) {
+                $hasExisting = !empty($existing[$key]);
+                $hasUpload = !empty($_FILES['cf_' . $key]) && $_FILES['cf_' . $key]['error'] === UPLOAD_ERR_OK;
+                $deleting = !empty($_POST['cf_' . $key . '_delete']);
+                if (!$hasExisting && !$hasUpload && !$deleting) {
+                    $errors[] = ($def['label'] ?? $key) . ' is required.';
+                }
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Validate custom fields and redirect back with errors on failure.
+     * Call this from store()/update() before saving.
+     *
+     * @param string $modelClass  Fully-qualified model class.
+     * @param array  $values      Collected custom-field values.
+     * @param string $redirect    URL to redirect to on failure.
+     * @param array  $existing    Existing custom-field values (for update).
+     */
+    protected function validateCustomFieldsOrFail(string $modelClass, array $values, string $redirect, array $existing = []): void
+    {
+        $errors = $this->validateCustomFields($modelClass, $values, $existing);
+        if (!empty($errors)) {
+            $this->flash('error', implode(' ', $errors));
+            $this->redirect($redirect);
+        }
+    }
+
     protected function flash(string $type, string $message): void
     {
         $_SESSION['flash'][$type] = $message;

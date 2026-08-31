@@ -17,25 +17,32 @@ class PurchaseController extends Controller
         $dateTo   = trim($this->input('date_to', ''));
         $page = max(1, (int) $this->input('page', 1));
 
-        $result = Purchase::filterPaginated($q, $dateFrom, $dateTo, $page);
+        $filters = ['q' => $q, 'date_from' => $dateFrom, 'date_to' => $dateTo]
+                 + $this->customFieldFilters(Purchase::customFields());
+
+        $cfFilters = $this->customFieldFilters(Purchase::customFields());
+        $result = Purchase::filterPaginated($q, $dateFrom, $dateTo, $page, 20, $cfFilters);
 
         $this->view('purchases/index', [
-            'title'     => 'Purchases',
-            'purchases' => $result['rows'],
-            'q'         => $q,
-            'date_from' => $dateFrom,
-            'date_to'   => $dateTo,
-            'pagination' => $result,
+            'title'        => 'Purchases',
+            'purchases'    => $result['rows'],
+            'q'            => $q,
+            'date_from'    => $dateFrom,
+            'date_to'      => $dateTo,
+            'customFields' => Purchase::customFields(),
+            'filters'      => $filters,
+            'pagination'   => $result,
         ]);
     }
 
     public function create(): void
     {
         $this->view('purchases/form', [
-            'title'     => 'New Purchase',
-            'suppliers' => Supplier::all('name'),
-            'products'  => Product::all('name'),
-            'nextInvoice' => 'PO-' . date('Ymd') . '-' . str_pad((string)(Purchase::count() + 1), 4, '0', STR_PAD_LEFT),
+            'title'        => 'New Purchase',
+            'suppliers'    => Supplier::all('name'),
+            'products'     => Product::all('name'),
+            'nextInvoice'  => 'PO-' . date('Ymd') . '-' . str_pad((string)(Purchase::count() + 1), 4, '0', STR_PAD_LEFT),
+            'customFields' => Purchase::customFields(),
         ]);
     }
 
@@ -62,6 +69,10 @@ class PurchaseController extends Controller
             $this->redirect('/purchases/create');
         }
 
+        // Collect and validate custom fields
+        $cfValues = $this->customFieldValues(Purchase::customFields());
+        $this->validateCustomFieldsOrFail(Purchase::class, $cfValues, '/purchases/create');
+
         $header = [
             'invoice_no'            => trim($this->input('invoice_no')),
             'supplier_id'           => (int) $this->input('supplier_id'),
@@ -70,6 +81,7 @@ class PurchaseController extends Controller
             'actual_arrival_date'   => $this->input('actual_arrival_date') ?: null,
             'actual_arrival_qty'    => (int) $this->input('actual_arrival_qty', 0),
             'notes'                 => trim($this->input('notes', '')),
+            'attributes'            => json_encode($cfValues, JSON_UNESCAPED_UNICODE),
             'created_by'            => Auth::user()['id'] ?? null,
         ];
 
@@ -88,7 +100,11 @@ class PurchaseController extends Controller
         $purchase = Purchase::withItems((int) $id);
         if (!$purchase) { $this->flash('error', 'Purchase not found.'); $this->redirect('/purchases'); }
 
-        $this->view('purchases/show', ['title' => 'Purchase #' . $purchase['invoice_no'], 'purchase' => $purchase]);
+        $this->view('purchases/show', [
+            'title'        => 'Purchase #' . $purchase['invoice_no'],
+            'purchase'     => $purchase,
+            'customFields' => Purchase::customFields(),
+        ]);
     }
 
     public function recordArrival(string $id): void

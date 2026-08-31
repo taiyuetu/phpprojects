@@ -2,11 +2,29 @@
 namespace App\Models;
 
 use App\Core\Model;
+use App\Core\HasCustomFields;
 
 class Purchase extends Model
 {
+    use HasCustomFields;
+
     protected static string $table = 'purchases';
-    protected static array $fillable = ['invoice_no', 'supplier_id', 'purchase_date', 'expected_arrival_date', 'notes', 'total', 'created_by'];
+    protected static array $fillable = ['invoice_no', 'supplier_id', 'purchase_date', 'expected_arrival_date', 'notes', 'total', 'attributes', 'created_by'];
+
+    /**
+     * Purchase custom fields. Add/edit entries here to get them in the form, list, filter, and CSV.
+     * Supported types: text, textarea, select, date, upload.
+     * Set 'required' => true to enforce validation on save.
+     */
+    protected static function customFieldDefinitions(): array
+    {
+        return [
+            'payment_terms'  => ['label' => 'Payment Terms',  'type' => 'select', 'filterable' => true, 'options' => ['Net 30', 'Net 60', 'COD', 'Prepaid']],
+            'priority'       => ['label' => 'Priority',       'type' => 'select', 'filterable' => true, 'options' => ['Normal', 'Urgent', 'Low']],
+            'warehouse'      => ['label' => 'Warehouse',      'type' => 'text',   'filterable' => true],
+            'purchase_notes' => ['label' => 'Internal Notes', 'type' => 'textarea', 'filterable' => false],
+        ];
+    }
 
     public static function allWithSupplier(): array
     {
@@ -63,7 +81,7 @@ class Purchase extends Model
     }
 
     /** Paginated version of searchWithSupplier / allWithSupplierFiltered. */
-    public static function filterPaginated(string $query = '', string $dateFrom = '', string $dateTo = '', int $page = 1, int $perPage = 20): array
+    public static function filterPaginated(string $query = '', string $dateFrom = '', string $dateTo = '', int $page = 1, int $perPage = 20, array $extraFilters = []): array
     {
         $where = ' WHERE 1 = 1';
         $params = [];
@@ -79,6 +97,13 @@ class Purchase extends Model
         if ($dateTo !== '') {
             $where .= ' AND pu.purchase_date <= :date_to';
             $params['date_to'] = $dateTo;
+        }
+
+        // Custom (JSON) fields — filter via json_extract on the attributes column
+        if (!empty($extraFilters)) {
+            $cf = self::customFieldFilterSql($extraFilters, 'pu');
+            $where .= $cf['sql'];
+            $params = array_merge($params, $cf['params']);
         }
 
         $join = 'FROM purchases pu JOIN suppliers s ON s.id = pu.supplier_id';

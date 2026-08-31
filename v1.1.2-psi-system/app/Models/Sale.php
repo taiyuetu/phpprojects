@@ -2,12 +2,29 @@
 namespace App\Models;
 
 use App\Core\Model;
+use App\Core\HasCustomFields;
 use RuntimeException;
 
 class Sale extends Model
 {
+    use HasCustomFields;
+
     protected static string $table = 'sales';
-    protected static array $fillable = ['invoice_no', 'customer_id', 'sale_date', 'total', 'created_by'];
+    protected static array $fillable = ['invoice_no', 'customer_id', 'sale_date', 'total', 'attributes', 'created_by'];
+
+    /**
+     * Sale custom fields. Add/edit entries here to get them in the form, list, filter, and CSV.
+     * Supported types: text, textarea, select, date, upload.
+     * Set 'required' => true to enforce validation on save.
+     */
+    protected static function customFieldDefinitions(): array
+    {
+        return [
+            'payment_method' => ['label' => 'Payment Method', 'type' => 'select', 'filterable' => true, 'options' => ['Cash', 'Credit Card', 'Bank Transfer', 'Check', 'Other']],
+            'shipping_date'  => ['label' => 'Shipping Date',  'type' => 'date',   'filterable' => true],
+            'delivery_notes' => ['label' => 'Delivery Notes', 'type' => 'textarea', 'filterable' => false],
+        ];
+    }
 
     public static function allWithCustomer(): array
     {
@@ -64,7 +81,7 @@ class Sale extends Model
     }
 
     /** Paginated version of searchWithCustomer / allWithCustomerFiltered. */
-    public static function filterPaginated(string $query = '', string $dateFrom = '', string $dateTo = '', int $page = 1, int $perPage = 20): array
+    public static function filterPaginated(string $query = '', string $dateFrom = '', string $dateTo = '', int $page = 1, int $perPage = 20, array $extraFilters = []): array
     {
         $where = ' WHERE 1 = 1';
         $params = [];
@@ -80,6 +97,13 @@ class Sale extends Model
         if ($dateTo !== '') {
             $where .= ' AND sa.sale_date <= :date_to';
             $params['date_to'] = $dateTo;
+        }
+
+        // Custom (JSON) fields — filter via json_extract on the attributes column
+        if (!empty($extraFilters)) {
+            $cf = self::customFieldFilterSql($extraFilters, 'sa');
+            $where .= $cf['sql'];
+            $params = array_merge($params, $cf['params']);
         }
 
         $join = 'FROM sales sa LEFT JOIN customers c ON c.id = sa.customer_id';

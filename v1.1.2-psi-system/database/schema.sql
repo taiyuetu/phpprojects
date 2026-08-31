@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS users (
     email      TEXT NOT NULL UNIQUE,
     password   TEXT NOT NULL,
     role       TEXT NOT NULL DEFAULT 'staff',   -- admin | staff
+    attributes TEXT DEFAULT '{}',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -61,6 +62,7 @@ CREATE TABLE IF NOT EXISTS purchases (
     expected_arrival_date TEXT,
     notes                 TEXT DEFAULT '',
     total                 REAL NOT NULL DEFAULT 0,
+    attributes            TEXT DEFAULT '{}',
     created_by            INTEGER,
     created_at            TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id),
@@ -96,6 +98,7 @@ CREATE TABLE IF NOT EXISTS sales (
     customer_id INTEGER,
     sale_date   TEXT NOT NULL,
     total       REAL NOT NULL DEFAULT 0,
+    attributes  TEXT DEFAULT '{}',
     created_by  INTEGER,
     created_at  TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (customer_id) REFERENCES customers(id),
@@ -122,6 +125,7 @@ CREATE TABLE IF NOT EXISTS inventory_transactions (
     balance_after INTEGER NOT NULL,
     reference     TEXT,               -- e.g. invoice number
     notes         TEXT,
+    attributes    TEXT DEFAULT '{}',
     created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (product_id) REFERENCES products(id)
 );

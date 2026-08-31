@@ -2,11 +2,30 @@
 namespace App\Models;
 
 use App\Core\Model;
+use App\Core\HasCustomFields;
 
 class InventoryTransaction extends Model
 {
+    use HasCustomFields;
+
+    protected static bool $logChanges = false; // Transactions are already an audit trail
+
     protected static string $table = 'inventory_transactions';
-    protected static array $fillable = ['product_id', 'type', 'qty_change', 'balance_after', 'reference', 'notes'];
+    protected static array $fillable = ['product_id', 'type', 'qty_change', 'balance_after', 'reference', 'notes', 'attributes'];
+
+    /**
+     * InventoryTransaction custom fields. Add/edit entries here to get them in the list and filter.
+     * Supported types: text, textarea, select, date, upload.
+     * Set 'required' => true to enforce validation on save.
+     */
+    protected static function customFieldDefinitions(): array
+    {
+        return [
+            'batch_no'   => ['label' => 'Batch No.',   'type' => 'text',   'filterable' => true],
+            'reason'     => ['label' => 'Reason',       'type' => 'select', 'filterable' => true, 'options' => ['Damaged', 'Expired', 'Returned', 'Recount', 'Shrinkage', 'Other']],
+            'verified_by' => ['label' => 'Verified By', 'type' => 'text',  'filterable' => true],
+        ];
+    }
 
     public static function forProduct(int $productId): array
     {

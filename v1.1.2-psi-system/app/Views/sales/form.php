@@ -1,4 +1,8 @@
-<?php use App\Core\Router; ?>
+<?php
+use App\Core\Router;
+$customFields = $customFields ?? [];
+$attrs = [];
+?>
 <style>
 /* Add-item area */
 .add-item-area {
@@ -132,6 +136,9 @@
         <div style="text-align:right;margin-top:16px;font-size:1.1rem;">
             <strong>Grand Total: $<span id="grand-total">0.00</span></strong>
         </div>
+
+        <!-- Custom fields -->
+        <?php include __DIR__ . '/../partials/custom_fields_form.php'; ?>
 
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Save Sale</button>

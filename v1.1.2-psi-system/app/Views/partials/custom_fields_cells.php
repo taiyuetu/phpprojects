@@ -1,5 +1,6 @@
 <?php foreach ($customFields as $key => $def): ?>
-<?php if (($def['type'] ?? 'text') === 'upload'): ?>
+<?php $type = $def['type'] ?? 'text'; ?>
+<?php if ($type === 'upload'): ?>
     <td>
         <?php $val = $attrs[$key] ?? ''; ?>
         <?php if ($val !== ''): ?>
@@ -12,6 +13,8 @@
             <span class="text-muted">—</span>
         <?php endif; ?>
     </td>
+<?php elseif ($type === 'textarea'): ?>
+    <td class="text-muted" style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="<?= htmlspecialchars($attrs[$key] ?? '') ?>"><?= htmlspecialchars(mb_strimwidth($attrs[$key] ?? '—', 0, 50, '…')) ?></td>
 <?php else: ?>
     <td class="text-muted"><?= htmlspecialchars($attrs[$key] ?? '—') ?></td>
 <?php endif; ?>

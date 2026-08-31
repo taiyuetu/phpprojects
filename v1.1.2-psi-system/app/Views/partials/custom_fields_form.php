@@ -3,16 +3,25 @@
     <label>Details</label>
     <div class="form-row">
         <?php foreach ($customFields as $key => $def): ?>
+            <?php $type = $def['type'] ?? 'text'; ?>
+            <?php $required = !empty($def['required']); ?>
             <div class="form-group">
-                <label><?= htmlspecialchars($def['label']) ?></label>
-                <?php if (($def['type'] ?? 'text') === 'select'): ?>
-                    <select name="cf_<?= htmlspecialchars($key) ?>">
+                <label>
+                    <?= htmlspecialchars($def['label']) ?>
+                    <?php if ($required): ?><span style="color:#dc2626;">*</span><?php endif; ?>
+                </label>
+                <?php if ($type === 'select'): ?>
+                    <select name="cf_<?= htmlspecialchars($key) ?>"<?= $required ? ' required' : '' ?>>
                         <option value="">—</option>
                         <?php foreach ($def['options'] ?? [] as $opt): ?>
                             <option value="<?= htmlspecialchars($opt) ?>" <?= (($attrs[$key] ?? '') === $opt) ? 'selected' : '' ?>><?= htmlspecialchars($opt) ?></option>
                         <?php endforeach; ?>
                     </select>
-                <?php elseif (($def['type'] ?? 'text') === 'upload'): ?>
+                <?php elseif ($type === 'textarea'): ?>
+                    <textarea name="cf_<?= htmlspecialchars($key) ?>" rows="3" placeholder="<?= htmlspecialchars($def['label']) ?>"<?= $required ? ' required' : '' ?>><?= htmlspecialchars($attrs[$key] ?? '') ?></textarea>
+                <?php elseif ($type === 'date'): ?>
+                    <input type="date" name="cf_<?= htmlspecialchars($key) ?>" value="<?= htmlspecialchars($attrs[$key] ?? '') ?>"<?= $required ? ' required' : '' ?>>
+                <?php elseif ($type === 'upload'): ?>
                     <?php $existing = $attrs[$key] ?? ''; ?>
                     <?php if ($existing !== ''): ?>
                         <div class="cf-upload-preview" style="margin-bottom:6px;">
@@ -26,9 +35,9 @@
                             </label>
                         </div>
                     <?php endif; ?>
-                    <input type="file" name="cf_<?= htmlspecialchars($key) ?>">
+                    <input type="file" name="cf_<?= htmlspecialchars($key) ?>"<?= $required ? ' required' : '' ?>>
                 <?php else: ?>
-                    <input type="text" name="cf_<?= htmlspecialchars($key) ?>" value="<?= htmlspecialchars($attrs[$key] ?? '') ?>" placeholder="<?= htmlspecialchars($def['label']) ?>">
+                    <input type="text" name="cf_<?= htmlspecialchars($key) ?>" value="<?= htmlspecialchars($attrs[$key] ?? '') ?>" placeholder="<?= htmlspecialchars($def['label']) ?>"<?= $required ? ' required' : '' ?>>
                 <?php endif; ?>
             </div>
         <?php endforeach; ?>
