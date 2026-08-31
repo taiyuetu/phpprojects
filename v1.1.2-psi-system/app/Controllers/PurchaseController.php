@@ -6,6 +6,7 @@ use App\Core\Auth;
 use App\Models\Purchase;
 use App\Models\Supplier;
 use App\Models\Product;
+use App\Models\PurchaseArrival;
 
 class PurchaseController extends Controller
 {
