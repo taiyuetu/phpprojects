@@ -5,6 +5,55 @@ All notable changes to the PSI System are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] - 2026-08-31
+
+### Added
+- **Custom fields for all transaction models** — added `HasCustomFields` trait to
+  Sale, Purchase, User, and InventoryTransaction. Each model now has a JSON
+  `attributes` column and sample field definitions that automatically appear in
+  forms, list views, filters, and CSV export/import.
+  - **Sale**: Payment Method (select), Shipping Date (date), Delivery Notes (textarea)
+  - **Purchase**: Payment Terms (select), Priority (select), Warehouse (text), Internal Notes (textarea)
+  - **User**: Department (select), Phone (text), Hire Date (date), Notes (textarea)
+  - **InventoryTransaction**: Batch No. (text), Reason (select), Verified By (text)
+- **New field type: `textarea`** — multiline text input in forms, truncated display
+  (50 chars + ellipsis) in list tables, with hover-to-see-full-text.
+- **New field type: `date`** — native HTML `<input type="date">` picker in forms,
+  ISO 8601 (YYYY-MM-DD) server-side validation, date filter inputs on list pages.
+- **New field flag: `required`** — when set to `true` in a field definition:
+  - HTML5 `required` attribute is rendered on the form input (instant client feedback)
+  - Red asterisk (\*) shown next to the field label
+  - Server-side validation via `Controller::validateCustomFieldsOrFail()` blocks
+    submission and shows a flash error if the field is empty
+- **`Controller::validateCustomFields()` and `::validateCustomFieldsOrFail()`**
+  — reusable methods that any controller can call to validate custom field values
+  against their definitions (required checks, date format, select option whitelist).
+- **`HasCustomFields::validateCustomFields()`** — trait-level validation method
+  (mirrors the controller method; available for direct model use).
+- **Database migration** — `database/add_attributes_to_transactions.php` adds the
+  `attributes` column to `sales`, `purchases`, `users`, and `inventory_transactions`.
+  Supports both SQLite and MySQL.
+- **Sample data SQL** — `database/sample_data.sql` contains the full schema plus a
+  seed data dump for quick demo setup.
+
+### Changed
+- **Custom field view partials** updated for new field types:
+  - `partials/custom_fields_form.php` — renders `textarea`, `date`, `required` flag
+  - `partials/custom_fields_cells.php` — `textarea` truncated with ellipsis; `date` shown normally
+  - `partials/custom_fields_filters.php` — `date` fields render as `<input type="date">`
+- **Sale and Purchase index views** now show custom field columns and filter controls
+  inline with the existing search/date filters.
+- **Sale and Purchase detail views** display custom field values in a summary grid.
+- **Inventory Ledger index** shows custom field columns and filter controls.
+- **`Sale::filterPaginated()`** and **`Purchase::filterPaginated()`** accept an
+  optional `$extraFilters` array for `json_extract`-based custom field filtering.
+
+### Database
+- Added `attributes TEXT DEFAULT '{}'` column to `sales`, `purchases`, `users`,
+  and `inventory_transactions` tables.
+- Updated `database/schema.sql` with the new columns.
+- Migration script: `database/add_attributes_to_transactions.php`
+
 ## [1.4.0] - 2026-08-29
 
 ### Added

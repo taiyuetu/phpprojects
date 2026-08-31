@@ -19,6 +19,9 @@ no Composer, no framework lock-in, just plain PHP organized the right way.
 - **Inventory Ledger** — full audit trail of every stock movement (purchase / sale / manual adjustment)
 - **Reports** — sales report, purchase report, and stock valuation report, each with date filtering
 - **Auth** — simple session-based login, CSRF protection on every form
+- **Custom Fields** — data-driven, JSON-backed extension fields on every model. Declare fields
+  once per model and they automatically appear in forms, list views, filters, and CSV import/export.
+  See [Custom Fields](#custom-fields) below.
 
 ---
 
@@ -38,6 +41,18 @@ open http://localhost:8000
 ```
 
 **Default login:** `admin@psi.local` / `admin123`
+
+### Quick Setup with Sample Data
+
+For a ready-to-use demo database with sample records:
+
+```bash
+# Import the sample SQL (schema + demo data in one file)
+sqlite3 database/database.sqlite < database/sample_data.sql
+
+# Start the server
+php -S localhost:8000 -t public
+```
 
 ### Using Apache/Nginx instead
 Point your virtual host's document root at `public/` and make sure
@@ -64,13 +79,21 @@ and run `database/setup.php` again to seed the admin user.
 psi-system/
 ├── app/
 │   ├── Core/              # The "framework": Router, Model, Controller, Database, Auth
+│   │   └── HasCustomFields.php  # Trait: JSON-backed custom fields for any model
 │   ├── Controllers/       # One controller per module (thin — delegates to Models)
 │   ├── Models/            # One model per table + the business logic that touches the DB
 │   └── Views/             # Plain PHP templates, grouped by module; layouts/main.php wraps them
+│       └── partials/
+│           ├── custom_fields_form.php     # Auto-rendered form inputs
+│           ├── custom_fields_headers.php  # Auto-rendered table headers
+│           ├── custom_fields_cells.php    # Auto-rendered table cells
+│           └── custom_fields_filters.php  # Auto-rendered filter controls
 ├── config/config.php      # App name, DB driver/credentials, session name
 ├── database/
-│   ├── schema.sql         # Full table definitions
-│   └── setup.php          # Run once to create + seed the database
+│   ├── schema.sql         # Full table definitions (always up to date)
+│   ├── sample_data.sql    # Schema + demo data — import for instant setup
+│   ├── setup.php          # Run once to create + seed the database
+│   └── add_attributes_to_transactions.php  # Migration for v1.5 custom fields
 ├── public/                # Web root — only this folder should be exposed by your server
 │   ├── index.php          # Front controller: bootstraps autoload, session, routes
 │   ├── .htaccess          # Apache clean-URL rewrite rules
@@ -101,6 +124,75 @@ psi-system/
 - **Plain SQL, no ORM magic.** `Model::raw()` lets any model run a hand-written
   query for joins/aggregates without fighting a query builder. You can always
   see exactly what SQL runs.
+
+---
+
+## Custom Fields
+
+Every master-data model (Product, Category, Supplier, Customer) and every
+transaction model (Sale, Purchase, User, InventoryTransaction) supports
+**JSON-backed custom fields** — a lightweight way to add new data columns
+without touching the database schema.
+
+### How It Works
+
+1. **Declare fields** in the model's `customFieldDefinitions()`:
+   ```php
+   // app/Models/Sale.php
+   protected static function customFieldDefinitions(): array
+   {
+       return [
+           'payment_method' => [
+               'label'    => 'Payment Method',
+               'type'     => 'select',
+               'options'  => ['Cash', 'Credit Card', 'Bank Transfer'],
+               'filterable' => true,
+               'required' => true,       // blocks save if empty
+           ],
+           'shipping_date' => [
+               'label'    => 'Shipping Date',
+               'type'     => 'date',      // date picker + YYYY-MM-DD validation
+               'filterable' => true,
+           ],
+           'delivery_notes' => [
+               'label'    => 'Delivery Notes',
+               'type'     => 'textarea',  // multiline text input
+           ],
+           'packing_slip' => [
+               'label'    => 'Packing Slip',
+               'type'     => 'upload',    // file upload with preview
+           ],
+       ];
+   }
+   ```
+
+2. **That's it.** The system automatically handles:
+   - **Form inputs** — rendered by `partials/custom_fields_form.php`
+   - **List table headers & cells** — `partials/custom_fields_headers.php` / `custom_fields_cells.php`
+   - **Filter controls** — `partials/custom_fields_filters.php`
+   - **SQL filtering** — `json_extract()` queries via `HasCustomFields::customFieldFilterSql()`
+   - **CSV export/import** — custom field columns are appended automatically
+   - **Required validation** — HTML5 client-side + server-side via `Controller::validateCustomFieldsOrFail()`
+
+### Supported Field Types
+
+| Type       | Form Input          | Filter Input       | List Display              |
+|------------|---------------------|--------------------|---------------------------|
+| `text`     | `<input type=text>` | `<input type=text>`| Plain text                |
+| `textarea` | `<textarea>`        | `<input type=text>`| Truncated (50 chars + …)  |
+| `select`   | `<select>` dropdown | `<select>` dropdown| Plain text                |
+| `date`     | `<input type=date>` | `<input type=date>`| YYYY-MM-DD                |
+| `upload`   | `<input type=file>` | *(not filterable)* | Image preview or file link|
+
+### Field Definition Options
+
+| Key           | Type     | Default   | Description                                   |
+|---------------|----------|-----------|-----------------------------------------------|
+| `label`       | string   | *(required)* | Human-readable label shown in UI           |
+| `type`        | string   | `'text'`  | One of: `text`, `textarea`, `select`, `date`, `upload` |
+| `filterable`  | bool     | `false`   | Show in list page filter form               |
+| `required`    | bool     | `false`   | Validate on save (client + server)          |
+| `options`     | string[] | `[]`      | Dropdown options (only for `select` type)   |
 
 ---
 
