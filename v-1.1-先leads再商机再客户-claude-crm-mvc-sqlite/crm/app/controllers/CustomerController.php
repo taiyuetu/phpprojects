@@ -55,6 +55,7 @@ class CustomerController extends Controller
 
         $customerModel = $this->model('Customer');
         $followUpModel = $this->model('FollowUp');
+        $orderModel = $this->model('Order');
         $customer = $customerModel->findWithOwner((int) $id);
 
         if (!$customer) {
@@ -65,6 +66,7 @@ class CustomerController extends Controller
         $this->view('customers/show', [
             'customer' => $customer,
             'deals' => $customerModel->deals((int) $id),
+            'orders' => $orderModel->byCustomer((int) $id),
             'convertedLead' => $customerModel->convertedLead((int) $id),
             'followUps' => $followUpModel->byCustomer((int) $id),
             'activities' => $customerModel->activities((int) $id),
@@ -129,6 +131,12 @@ class CustomerController extends Controller
             return;
         }
 
+        // Delete orders for this customer
+        $orderModel = $this->model('Order');
+        foreach ($orderModel->where('customer_id', $customerId) as $order) {
+            $orderModel->delete((int) $order['id']);
+        }
+
         // Delete leads that were converted to create this customer
         $leadModel = $this->model('Lead');
         foreach ($leadModel->where('customer_id', $customerId) as $lead) {
@@ -142,7 +150,7 @@ class CustomerController extends Controller
         }
 
         $customerModel->delete($customerId);
-        $this->setFlash('success', '客户及关联的线索、商机已删除。');
+        $this->setFlash('success', '客户及关联的线索、商机、订单已删除。');
         $this->redirect('/customers');
     }
 

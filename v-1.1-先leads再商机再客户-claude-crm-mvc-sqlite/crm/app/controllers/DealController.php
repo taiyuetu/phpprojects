@@ -58,7 +58,9 @@ class DealController extends Controller
     {
         $this->requireAuth();
 
-        $deal = $this->model('Deal')->find((int) $id);
+        $dealModel = $this->model('Deal');
+        $this->model('OrderItem'); // Load class for static unitOptions() in _form.php
+        $deal = $dealModel->find((int) $id);
         if (!$deal) {
             $this->setFlash('error', '商机不存在。');
             $this->redirect('/deals');
@@ -68,6 +70,7 @@ class DealController extends Controller
         $this->view('deals/edit', [
             'deal' => $deal,
             'customers' => $this->model('Customer')->all('name ASC'),
+            'orders' => $dealModel->orders((int) $id),
             'csrf' => $this->csrfToken(),
             'errors' => [],
         ]);
@@ -92,6 +95,7 @@ class DealController extends Controller
             $this->view('deals/edit', [
                 'deal' => array_merge(['id' => $id], $_POST),
                 'customers' => $this->model('Customer')->all('name ASC'),
+                'orders' => $dealModel->orders((int) $id),
                 'csrf' => $this->csrfToken(),
                 'errors' => $errors,
             ]);
@@ -105,8 +109,72 @@ class DealController extends Controller
         }
 
         $dealModel->update((int) $id, $data);
+
+        // ==========================================
+        // 当商机变为 closed_won（成交）时，自动创建订单
+        // ==========================================
+        if ($oldDeal['stage'] !== 'closed_won' && $data['stage'] === 'closed_won') {
+            $this->autoCreateOrderFromDeal($oldDeal, $_POST);
+        }
+
         $this->setFlash('success', '商机已更新。');
         $this->redirect('/deals');
+    }
+
+    /**
+     * 商机成交时自动创建订单 + 商品明细
+     */
+    private function autoCreateOrderFromDeal(array $deal, array $post): void
+    {
+        $orderModel = $this->model('Order');
+        $itemModel = $this->model('OrderItem');
+
+        // Check if order already exists for this deal
+        $existingOrders = $orderModel->byDeal((int) $deal['id']);
+        if (!empty($existingOrders)) {
+            return; // Already has order, skip
+        }
+
+        // Parse items from POST: items[0][product_name], items[0][quantity], etc.
+        $items = [];
+        if (!empty($post['items']) && is_array($post['items'])) {
+            foreach ($post['items'] as $item) {
+                $name = trim($item['product_name'] ?? '');
+                if ($name === '') continue;
+                $items[] = [
+                    'product_name' => $name,
+                    'sku'          => trim($item['sku'] ?? '') ?: null,
+                    'quantity'     => max(1, (float) ($item['quantity'] ?? 1)),
+                    'unit_price'   => max(0, (float) ($item['unit_price'] ?? 0)),
+                    'unit'         => trim($item['unit'] ?? '件') ?: '件',
+                    'notes'        => trim($item['notes'] ?? '') ?: null,
+                ];
+            }
+        }
+
+        // Calculate total from items, fallback to deal value
+        $total = 0;
+        foreach ($items as $item) {
+            $total += $item['quantity'] * $item['unit_price'];
+        }
+
+        // Create order
+        $orderId = $orderModel->create([
+            'order_number'    => $orderModel->generateOrderNumber(),
+            'deal_id'         => $deal['id'],
+            'customer_id'     => $deal['customer_id'],
+            'title'           => $deal['title'] . ' - 订单',
+            'amount'          => $total > 0 ? $total : $deal['value'],
+            'status'          => 'pending',
+            'payment_status'  => 'unpaid',
+            'order_date'      => date('Y-m-d'),
+            'owner_id'        => $_SESSION['user_id'],
+        ]);
+
+        // Create items if provided
+        if (!empty($items)) {
+            $itemModel->syncItems($orderId, $items);
+        }
     }
 
     public function destroy(string $id): void
@@ -119,6 +187,12 @@ class DealController extends Controller
             $this->setFlash('error', '商机不存在。');
             $this->redirect('/deals');
             return;
+        }
+
+        // Delete orders for this deal (set deal_id to null)
+        $orderModel = $this->model('Order');
+        foreach ($orderModel->byDeal((int) $id) as $order) {
+            $orderModel->update((int) $order['id'], ['deal_id' => null]);
         }
 
         $dealModel->delete((int) $id);

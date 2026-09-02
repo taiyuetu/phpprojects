@@ -29,4 +29,16 @@ class Deal extends Model
         )->single();
         return (float) ($row['total'] ?? 0);
     }
+
+    /** Orders belonging to this deal. */
+    public function orders(int $dealId): array
+    {
+        return $this->db()->query(
+            "SELECT o.*, c.name AS customer_name
+             FROM orders o
+             LEFT JOIN customers c ON c.id = o.customer_id
+             WHERE o.deal_id = :id
+             ORDER BY o.created_at DESC"
+        )->bind(':id', $dealId)->resultSet();
+    }
 }

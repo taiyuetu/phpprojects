@@ -44,3 +44,13 @@ $router->post('/deals', 'DealController@store');
 $router->get('/deals/{id}/edit', 'DealController@edit');
 $router->put('/deals/{id}', 'DealController@update');
 $router->delete('/deals/{id}', 'DealController@destroy');
+$router->post('/deals/{id}/create-order', 'OrderController@createFromDeal');
+
+// ---- Orders ----
+$router->get('/orders', 'OrderController@index');
+$router->get('/orders/create', 'OrderController@create');
+$router->post('/orders', 'OrderController@store');
+$router->get('/orders/{id}', 'OrderController@show');
+$router->get('/orders/{id}/edit', 'OrderController@edit');
+$router->put('/orders/{id}', 'OrderController@update');
+$router->delete('/orders/{id}', 'OrderController@destroy');

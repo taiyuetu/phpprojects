@@ -87,6 +87,51 @@
             <?php endif; ?>
         </div>
 
+        <!-- 订单列表 -->
+        <div class="card card-table p-3 mb-3">
+            <h6 class="text-muted small text-uppercase mb-3">
+                <i class="bi bi-receipt me-1"></i>订单记录
+                <span class="badge bg-success ms-1"><?= count($orders) ?></span>
+            </h6>
+            <?php if (!$orders): ?>
+                <p class="text-muted small mb-0">该客户暂无订单。</p>
+            <?php else: ?>
+                <?php foreach ($orders as $o): ?>
+                    <div class="border-bottom py-2">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <a href="<?= url('/orders/' . $o['id']) ?>" class="fw-semibold text-decoration-none">
+                                    <?= e($o['order_number']) ?>
+                                </a>
+                                <br>
+                                <small class="text-muted">
+                                    <i class="bi bi-cash me-1"></i><?= money($o['amount']) ?>
+                                    <?php if ($o['deal_title']): ?>
+                                        <br><i class="bi bi-lightning me-1"></i><?= e($o['deal_title']) ?>
+                                    <?php endif; ?>
+                                </small>
+                            </div>
+                            <div class="text-end">
+                                <?= statusBadge($o['status']) ?>
+                                <br>
+                                <?php
+                                $paymentBadge = [
+                                    'unpaid'  => 'bg-danger',
+                                    'partial' => 'bg-warning text-dark',
+                                    'paid'    => 'bg-success',
+                                ];
+                                $paymentLabel = Order::paymentStatusLabel($o['payment_status']);
+                                ?>
+                                <span class="badge <?= $paymentBadge[$o['payment_status']] ?? 'bg-secondary' ?>">
+                                    <?= e($paymentLabel) ?>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+
         <!-- 来源线索信息 -->
         <div class="card card-table p-3">
             <h6 class="text-muted small text-uppercase mb-3">

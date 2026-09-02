@@ -27,6 +27,9 @@
             <a href="<?= url('/deals') ?>" class="<?= str_contains($_SERVER['REQUEST_URI'], '/deals') ? 'active' : '' ?>">
                 <i class="bi bi-currency-dollar"></i> 商机
             </a>
+            <a href="<?= url('/orders') ?>" class="<?= str_contains($_SERVER['REQUEST_URI'], '/orders') ? 'active' : '' ?>">
+                <i class="bi bi-receipt"></i> 订单
+            </a>
             <a href="<?= url('/help') ?>" class="<?= str_contains($_SERVER['REQUEST_URI'], '/help') ? 'active' : '' ?>">
                 <i class="bi bi-question-circle"></i> 使用说明
             </a>

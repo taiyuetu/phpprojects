@@ -18,32 +18,32 @@
         <div class="card stat-card p-3">
             <div class="d-flex justify-content-between align-items-start">
                 <div>
-                    <div class="text-muted small">活跃客户</div>
-                    <div class="stat-value"><?= (int) $stats['active_customers'] ?></div>
-                </div>
-                <div class="stat-icon bg-success"><i class="bi bi-person-check-fill"></i></div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3 col-sm-6">
-        <div class="card stat-card p-3">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <div class="text-muted small">待处理线索</div>
-                    <div class="stat-value"><?= (int) $stats['open_leads'] ?></div>
-                </div>
-                <div class="stat-icon bg-info"><i class="bi bi-magnet-fill"></i></div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3 col-sm-6">
-        <div class="card stat-card p-3">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
                     <div class="text-muted small">商机管线</div>
                     <div class="stat-value"><?= money($stats['pipeline_value']) ?></div>
                 </div>
                 <div class="stat-icon bg-warning"><i class="bi bi-currency-dollar"></i></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="card stat-card p-3">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="text-muted small">订单总数</div>
+                    <div class="stat-value"><?= (int) $stats['total_orders'] ?></div>
+                </div>
+                <div class="stat-icon bg-success"><i class="bi bi-receipt"></i></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="card stat-card p-3">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="text-muted small">订单总额</div>
+                    <div class="stat-value"><?= money($stats['order_value']) ?></div>
+                </div>
+                <div class="stat-icon bg-info"><i class="bi bi-cash-stack"></i></div>
             </div>
         </div>
     </div>
@@ -107,7 +107,7 @@
         </div>
     </div>
 
-    <div class="col-12">
+    <div class="col-lg-6">
         <div class="card card-table">
             <div class="card-header bg-white d-flex justify-content-between align-items-center">
                 <strong>最近线索</strong>
@@ -135,6 +135,38 @@
                             <td><?= e($l['source'] ?: '—') ?></td>
                             <td><?= money($l['value']) ?></td>
                             <td><?= statusBadge($l['status']) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card card-table">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <strong>最近订单</strong>
+                <a href="<?= url('/orders') ?>" class="small">查看全部</a>
+            </div>
+            <div class="table-responsive">
+                <table class="table mb-0 align-middle">
+                    <tbody>
+                    <?php if (!$recentOrders): ?>
+                        <tr><td class="text-muted p-3">暂无订单。</td></tr>
+                    <?php endif; ?>
+                    <?php foreach ($recentOrders as $o): ?>
+                        <tr>
+                            <td>
+                                <a href="<?= url('/orders/' . $o['id']) ?>" class="fw-semibold text-decoration-none">
+                                    <?= e($o['order_number']) ?>
+                                </a>
+                                <div class="small text-muted"><?= e($o['customer_name'] ?? '—') ?></div>
+                            </td>
+                            <td class="text-end">
+                                <?= money($o['amount']) ?><br>
+                                <?= statusBadge($o['status']) ?>
+                            </td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
