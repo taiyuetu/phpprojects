@@ -24,13 +24,14 @@ if (is_readable($envPath)) {
     }
 }
 
-// ---- Database ----
-define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
-define('DB_PORT', getenv('DB_PORT') ?: '10036');
-define('DB_NAME', getenv('DB_NAME') ?: 'crm_db');
-define('DB_USER', getenv('DB_USER') ?: 'root');
-define('DB_PASS', getenv('DB_PASS') ?: 'root');
-define('DB_CHARSET', 'utf8mb4');
+// ---- Database (SQLite) ----
+// Path to the SQLite database file. Relative paths resolve from BASE_PATH.
+$dbPath = getenv('DB_PATH') ?: 'database/crm.sqlite';
+// If the path is relative, make it absolute from BASE_PATH.
+if ($dbPath[0] !== '/' && strpos($dbPath, ':') === false) {
+    $dbPath = BASE_PATH . '/' . ltrim($dbPath, '/');
+}
+define('DB_PATH', $dbPath);
 
 // ---- Application ----
 define('APP_NAME', 'MiniCRM');

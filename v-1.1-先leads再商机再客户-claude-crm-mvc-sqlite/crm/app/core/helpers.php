@@ -38,8 +38,9 @@ function currentUser(): ?array
     if (empty($_SESSION['user']) || empty($_SESSION['user']['role'])) {
         try {
             $db = Database::connection();
-            $stmt = $db->prepare("SELECT id, name, email, role FROM users WHERE id = :id");
-            $stmt->execute([':id' => (int) $_SESSION['user_id']]);
+            $stmt = $db->prepare('SELECT id, name, email, role FROM users WHERE id = :id');
+            $stmt->bindValue(':id', (int) $_SESSION['user_id'], PDO::PARAM_INT);
+            $stmt->execute();
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
             if ($user) {
                 $_SESSION['user'] = $user;

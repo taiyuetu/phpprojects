@@ -1,7 +1,7 @@
 # MiniCRM — PHP MVC CRM Application
 
 A lightweight, dependency-free CRM built on a small custom PHP MVC framework.
-No Composer packages required — just PHP and MySQL. Designed to be easy to
+No Composer packages required — just PHP and SQLite. Designed to be easy to
 read, extend, and maintain: every layer has one job and the folders map
 directly to the MVC pattern.
 
@@ -19,7 +19,7 @@ directly to the MVC pattern.
 ```
 crm/
 ├── app/
-│   ├── config/config.php     # DB credentials & app settings (env-var driven)
+│   ├── config/config.php     # DB path & app settings (env-var driven)
 │   ├── core/                 # The "framework": Router, Controller, Model, Database, helpers
 │   ├── controllers/          # One controller per resource (Auth, Dashboard, Customer, Lead, Deal)
 │   ├── models/                # One model per DB table, extends core/Model.php
@@ -30,7 +30,7 @@ crm/
 │   ├── index.php              # Front controller (single entry point)
 │   ├── .htaccess              # Rewrites all requests to index.php
 │   └── assets/                # CSS/JS
-├── database/schema.sql        # Tables + seed data (demo admin user, sample records)
+├── database/schema.sql        # Tables + seed data (SQLite — demo admin user, sample records)
 └── .htaccess                  # Points a domain root at /public if you can't set docroot directly
 ```
 
@@ -43,26 +43,25 @@ crm/
 
 ## Requirements
 
-- PHP 8.0+
-- MySQL 5.7+ / MariaDB
+- PHP 8.0+ with the `pdo_sqlite` extension enabled
 - Apache with `mod_rewrite` (or adapt the two `.htaccess` files' rules for Nginx)
 
 ## Setup
 
-1. **Import the database**
+1. **Initialize the database**
    ```bash
-   mysql -u root -p < database/schema.sql
+   sqlite3 database/crm.sqlite < database/schema.sql
    ```
-   This creates the `crm_db` database, all tables, and seeds:
+   This creates the SQLite file, all tables, and seeds:
    - Demo login: `admin@example.com` / `password`
    - 3 sample customers, 2 leads, 2 deals
 
-2. **Configure the connection** — either edit `app/config/config.php` directly, or (recommended) set environment variables before PHP starts:
+   The database file is created at `database/crm.sqlite` (git-ignored).
+
+2. **Configure the connection** — the app reads `DB_PATH` from the `.env` file or environment. The default is `database/crm.sqlite` (relative to the project root). To change it:
    ```bash
-   export DB_HOST=localhost
-   export DB_NAME=crm_db
-   export DB_USER=root
-   export DB_PASS=yourpassword
+   # In .env
+   DB_PATH=/absolute/path/to/crm.sqlite
    ```
 
 3. **Point your web server's document root at `public/`.**

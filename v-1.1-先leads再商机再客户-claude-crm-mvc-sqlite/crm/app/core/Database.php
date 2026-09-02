@@ -20,7 +20,8 @@ class Database
     public static function connection(): PDO
     {
         if (self::$instance === null) {
-            $dsn = 'mysql:host=' . DB_HOST . ';port=' . DB_PORT . ';dbname=' . DB_NAME . ';charset=' . DB_CHARSET;
+            $dbPath = DB_PATH;
+            $dsn = 'sqlite:' . $dbPath;
             $options = [
                 PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
@@ -28,7 +29,11 @@ class Database
             ];
 
             try {
-                self::$instance = new PDO($dsn, DB_USER, DB_PASS, $options);
+                self::$instance = new PDO($dsn, null, null, $options);
+                // Enable foreign key support (off by default in SQLite)
+                self::$instance->exec('PRAGMA foreign_keys = ON');
+                // Enable WAL mode for better concurrent read performance
+                self::$instance->exec('PRAGMA journal_mode = WAL');
             } catch (PDOException $e) {
                 if (APP_DEBUG) {
                     die('Database connection failed: ' . $e->getMessage());
