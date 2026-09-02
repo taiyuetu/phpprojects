@@ -126,6 +126,17 @@ class PurchaseController extends Controller
             $this->redirect('/purchases/' . $id);
         }
 
+        // Validate against remaining ordered qty
+        $remaining = PurchaseArrival::remainingQty((int) $id);
+        if ($remaining <= 0) {
+            $this->flash('error', 'This purchase order is already fully arrived.');
+            $this->redirect('/purchases/' . $id);
+        }
+        if ($qty > $remaining) {
+            $this->flash('error', "Arrival qty ({$qty}) exceeds remaining ordered qty ({$remaining}). Maximum allowed is {$remaining} units.");
+            $this->redirect('/purchases/' . $id);
+        }
+
         try {
             PurchaseArrival::recordArrival((int) $id, $arrivalDate, $qty, $notes);
             $this->flash('success', 'Arrival recorded! Stock updated by ' . $qty . ' units.');

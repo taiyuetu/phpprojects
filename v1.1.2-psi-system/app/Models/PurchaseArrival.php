@@ -32,6 +32,22 @@ class PurchaseArrival extends Model
         return (int)($result[0]['total'] ?? 0);
     }
 
+    /** Get total ordered qty for a purchase (sum of purchase_items qty) */
+    public static function totalOrderedQty(int $purchaseId): int
+    {
+        $result = self::raw(
+            'SELECT COALESCE(SUM(qty), 0) AS total FROM purchase_items WHERE purchase_id = ?',
+            [$purchaseId]
+        );
+        return (int)($result[0]['total'] ?? 0);
+    }
+
+    /** Get remaining qty that can still arrive */
+    public static function remainingQty(int $purchaseId): int
+    {
+        return max(0, self::totalOrderedQty($purchaseId) - self::totalArrivedQty($purchaseId));
+    }
+
     /** Record a new arrival and update product stock */
     public static function recordArrival(int $purchaseId, string $arrivalDate, int $qty, string $notes = ''): int
     {
@@ -42,6 +58,15 @@ class PurchaseArrival extends Model
             // Get purchase info
             $purchase = Purchase::find($purchaseId);
             if (!$purchase) throw new \Exception('Purchase not found');
+
+            // Validate: arrival qty must not exceed remaining ordered qty
+            $remaining = self::remainingQty($purchaseId);
+            if ($remaining <= 0) {
+                throw new \Exception('This purchase order is already fully arrived. No more arrivals can be recorded.');
+            }
+            if ($qty > $remaining) {
+                throw new \Exception("Arrival qty ({$qty}) exceeds remaining ordered qty ({$remaining}). You can record at most {$remaining} units.");
+            }
 
             // Get purchase items to distribute qty
             $items = PurchaseItem::byPurchase($purchaseId);

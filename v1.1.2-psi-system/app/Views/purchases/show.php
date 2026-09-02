@@ -2,6 +2,9 @@
 use App\Core\Router;
 $customFields = $customFields ?? [];
 $purchaseAttrs = json_decode($purchase['attributes'] ?? '{}', true) ?: [];
+$totalOrdered = (int)($purchase['total_ordered_qty'] ?? 0);
+$totalArrived = (int)$purchase['total_arrived_qty'];
+$remaining = max(0, $totalOrdered - $totalArrived);
 ?>
 <div class="card">
     <div style="display:flex;justify-content:space-between;">
@@ -22,8 +25,19 @@ $purchaseAttrs = json_decode($purchase['attributes'] ?? '{}', true) ?: [];
             <div style="font-weight:500;"><?= $purchase['expected_arrival_date'] ? htmlspecialchars($purchase['expected_arrival_date']) : '<span style="color:#9ca3af;">—</span>' ?></div>
         </div>
         <div>
+            <div style="font-size:.8rem;color:#6b7280;">Total Ordered (采购数量)</div>
+            <div style="font-weight:500;"><?= $totalOrdered ?> units</div>
+        </div>
+        <div>
             <div style="font-size:.8rem;color:#6b7280;">Total Arrived (累计到货)</div>
-            <div style="font-weight:500;color:#059669;"><?= (int)$purchase['total_arrived_qty'] ?> units</div>
+            <div style="font-weight:500;color:#059669;"><?= $totalArrived ?> units</div>
+        </div>
+        <div>
+            <div style="font-size:.8rem;color:#6b7280;">Remaining (剩余数量)</div>
+            <div style="font-weight:500;color:<?= $remaining > 0 ? '#d97706' : '#059669' ?>;">
+                <?= $remaining ?> units
+                <?= $remaining <= 0 ? ' ✅' : '' ?>
+            </div>
         </div>
         <?php if (!empty($customFields)): ?>
             <?php foreach ($customFields as $key => $def): ?>
@@ -55,8 +69,9 @@ $purchaseAttrs = json_decode($purchase['attributes'] ?? '{}', true) ?: [];
     <?php endif; ?>
 
     <!-- Record New Arrival Form -->
+    <?php if ($remaining > 0): ?>
     <div style="margin-top:20px;padding:16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;">
-        <h3 style="margin-top:0;margin-bottom:12px;font-size:1rem;color:#0369a1;">📦 Record Arrival (记录到货)</h3>
+        <h3 style="margin-top:0;margin-bottom:12px;font-size:1rem;color:#0369a1;">📦 Record Arrival (记录到货) — <?= $remaining ?> units remaining</h3>
         <form method="post" action="<?= Router::url('/purchases/' . $purchase['id'] . '/arrival') ?>">
             <?= $this->csrfField() ?>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
@@ -65,8 +80,8 @@ $purchaseAttrs = json_decode($purchase['attributes'] ?? '{}', true) ?: [];
                     <input type="date" name="arrival_date" value="<?= date('Y-m-d') ?>" required>
                 </div>
                 <div class="form-group">
-                    <label style="font-size:.85rem;color:#374151;">Arrival Qty (到货数量)</label>
-                    <input type="number" name="qty" min="1" value="1" required>
+                    <label style="font-size:.85rem;color:#374151;">Arrival Qty (到货数量) — max <?= $remaining ?></label>
+                    <input type="number" name="qty" min="1" max="<?= $remaining ?>" value="<?= min(1, $remaining) ?>" required>
                 </div>
                 <div class="form-group">
                     <label style="font-size:.85rem;color:#374151;">Notes (备注)</label>
@@ -78,6 +93,12 @@ $purchaseAttrs = json_decode($purchase['attributes'] ?? '{}', true) ?: [];
             </div>
         </form>
     </div>
+    <?php else: ?>
+    <div style="margin-top:20px;padding:16px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;">
+        <h3 style="margin-top:0;margin-bottom:4px;font-size:1rem;color:#166534;">✅ Fully Arrived</h3>
+        <p style="margin:0;color:#15803d;font-size:.9rem;">All ordered quantities have been recorded. No more arrivals can be added.</p>
+    </div>
+    <?php endif; ?>
 
     <!-- Arrival History -->
     <?php if (!empty($purchase['arrivals'])): ?>
@@ -110,7 +131,7 @@ $purchaseAttrs = json_decode($purchase['attributes'] ?? '{}', true) ?: [];
             <tfoot>
                 <tr>
                     <td colspan="2" class="text-right"><strong>Total Arrived</strong></td>
-                    <td class="text-right" style="font-weight:700;color:#059669;"><?= (int)$purchase['total_arrived_qty'] ?></td>
+                    <td class="text-right" style="font-weight:700;color:#059669;"><?= $totalArrived ?></td>
                     <td colspan="3"></td>
                 </tr>
             </tfoot>

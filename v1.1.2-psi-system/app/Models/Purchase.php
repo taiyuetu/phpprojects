@@ -153,6 +153,8 @@ class Purchase extends Model
         $purchase['items'] = $items;
         $purchase['arrivals'] = PurchaseArrival::byPurchase($id);
         $purchase['total_arrived_qty'] = PurchaseArrival::totalArrivedQty($id);
+        $purchase['total_ordered_qty'] = PurchaseArrival::totalOrderedQty($id);
+        $purchase['remaining_qty'] = max(0, $purchase['total_ordered_qty'] - $purchase['total_arrived_qty']);
         return $purchase;
     }
 
