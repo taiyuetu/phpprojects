@@ -1,6 +1,9 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h3 class="mb-0">商机</h3>
-    <a href="<?= url('/deals/create') ?>" class="btn btn-primary"><i class="bi bi-plus-lg"></i> 新建商机</a>
+    <div class="d-flex gap-2">
+        <a href="<?= url('/deals/archived') ?>" class="btn btn-outline-secondary"><i class="bi bi-archive"></i> 已归档</a>
+        <a href="<?= url('/deals/create') ?>" class="btn btn-primary"><i class="bi bi-plus-lg"></i> 新建商机</a>
+    </div>
 </div>
 
 <?php

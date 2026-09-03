@@ -44,6 +44,8 @@ $router->post('/deals', 'DealController@store');
 $router->get('/deals/{id}/edit', 'DealController@edit');
 $router->put('/deals/{id}', 'DealController@update');
 $router->delete('/deals/{id}', 'DealController@destroy');
+$router->get('/deals/archived', 'DealController@archived');
+$router->post('/deals/{id}/unarchive', 'DealController@unarchive');
 $router->post('/deals/{id}/create-order', 'OrderController@createFromDeal');
 $router->post('/deals/{id}/attachments', 'DealController@uploadAttachment');
 $router->post('/deals/{id}/attachments/{attachmentId}/delete', 'DealController@deleteAttachment');

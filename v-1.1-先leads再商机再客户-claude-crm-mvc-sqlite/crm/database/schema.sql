@@ -100,6 +100,8 @@ CREATE TABLE IF NOT EXISTS deals (
     stage_negotiation_at  TEXT,
     stage_closed_won_at   TEXT,
     stage_closed_lost_at  TEXT,
+    archived              INTEGER NOT NULL DEFAULT 0,
+    archived_at           TEXT,
     owner_id              INTEGER,
     created_at            TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at            TEXT NOT NULL DEFAULT (datetime('now')),
@@ -108,6 +110,7 @@ CREATE TABLE IF NOT EXISTS deals (
 );
 
 CREATE INDEX IF NOT EXISTS idx_deals_stage ON deals(stage);
+CREATE INDEX IF NOT EXISTS idx_deals_archived ON deals(archived);
 
 -- ---------------------------------------------------------------
 -- 5. Orders (confirmed orders from closed deals)

@@ -205,7 +205,10 @@ class OrderController extends Controller
         // Copy attachments from deal to order
         $this->model('Attachment')->copyTo('deal', (int) $deal['id'], 'order', (int) $orderId, (int) $_SESSION['user_id']);
 
-        $this->setFlash('success', '订单已从商机创建。');
+        // 已转为订单，归档商机（保留历史数据，订单 deal_id 关联不丢失）
+        $this->model('Deal')->archive((int) $dealId);
+
+        $this->setFlash('success', '订单已从商机创建，商机已自动归档。');
         $this->redirect('/orders/' . $orderId);
     }
 
