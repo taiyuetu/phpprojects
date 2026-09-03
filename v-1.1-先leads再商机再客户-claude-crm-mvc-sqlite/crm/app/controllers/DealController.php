@@ -199,6 +199,15 @@ class DealController extends Controller
         if (!empty($items)) {
             $itemModel->syncItems($orderId, $items);
         }
+
+        // Copy attachments from deal to order
+        $this->model('Attachment')->copyTo(
+            'deal',
+            (int) $deal['id'],
+            'order',
+            (int) $orderId,
+            (int) $_SESSION['user_id']
+        );
     }
 
     public function destroy(string $id): void

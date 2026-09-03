@@ -1,8 +1,19 @@
 -- ===============================================================
 -- MiniCRM Complete Database Schema (SQLite)
--- Usage: sqlite3 database/crm.sqlite < database/schema.sql
 -- ===============================================================
-
+-- THIS FILE IS THE CANONICAL / SINGLE SOURCE OF TRUTH for the database.
+-- It is fully idempotent: every statement uses IF NOT EXISTS / OR IGNORE,
+-- so it is safe to re-run any number of times on any database.
+--
+-- Recommended usage (handles both fresh installs AND upgrading existing DBs):
+--     php database/migrate.php
+--
+-- Direct (fresh install only):
+--     sqlite3 database/crm.sqlite < database/schema.sql
+--
+-- For one-off structural changes to EXISTING tables (ALTER TABLE), put a new
+-- numbered file in database/migrations/ -- migrate.php applies it exactly once.
+-- ===============================================================
 PRAGMA foreign_keys = ON;
 PRAGMA journal_mode = WAL;
 
@@ -198,6 +209,24 @@ CREATE TABLE IF NOT EXISTS activities (
 );
 
 -- ---------------------------------------------------------------
+-- 8. Attachments (file uploads for deals and orders)
+-- ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS attachments (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    related_type  TEXT NOT NULL CHECK (related_type IN ('deal','order')),
+    related_id    INTEGER NOT NULL,
+    filename      TEXT NOT NULL,
+    original_name TEXT NOT NULL,
+    mime_type     TEXT NOT NULL,
+    file_size     INTEGER NOT NULL DEFAULT 0,
+    uploaded_by   INTEGER,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_attachments_related ON attachments(related_type, related_id);
+
+-- ---------------------------------------------------------------
 -- Triggers to emulate MySQL's ON UPDATE CURRENT_TIMESTAMP
 -- ---------------------------------------------------------------
 CREATE TRIGGER IF NOT EXISTS trg_customers_updated
@@ -244,7 +273,8 @@ END;
 
 -- ---------------------------------------------------------------
 -- Seed Data
--- ---------------------------------------------------------------
+-- NOTE: seeds are idempotent (INSERT OR IGNORE). New tables added to schema.sql
+-- are picked up automatically by `php database/migrate.php` on existing DBs.
 
 -- 1. Default admin login: admin@example.com / password
 INSERT OR IGNORE INTO users (id, name, email, password, role) VALUES

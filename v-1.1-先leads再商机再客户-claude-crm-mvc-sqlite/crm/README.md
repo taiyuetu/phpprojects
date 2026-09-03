@@ -30,7 +30,9 @@ crm/
 │   ├── index.php              # Front controller (single entry point)
 │   ├── .htaccess              # Rewrites all requests to index.php
 │   └── assets/                # CSS/JS
-├── database/schema.sql        # Tables + seed data (SQLite — demo admin user, sample records)
+├── database/schema.sql        # CANONICAL schema + seed data (idempotent, self-healing)
+├── database/migrate.php       # One command: create / upgrade / repair the database
+├── database/migrations/       # One-off ALTER-style changes (applied exactly once)
 └── .htaccess                  # Points a domain root at /public if you can't set docroot directly
 ```
 
@@ -48,13 +50,17 @@ crm/
 
 ## Setup
 
-1. **Initialize the database**
+1. **Create / upgrade the database** (single command, safe to re-run):
    ```bash
-   sqlite3 database/crm.sqlite < database/schema.sql
+   php database/migrate.php
    ```
-   This creates the SQLite file, all tables, and seeds:
-   - Demo login: `admin@example.com` / `password`
-   - 3 sample customers, 2 leads, 2 deals
+   - **Fresh install** → creates `database/crm.sqlite`, all tables, indexes, triggers and seeds:
+     - Demo login: `admin@example.com` / `password`
+     - 3 sample customers, 2 leads, 2 deals
+   - **Existing / outdated database** → `schema.sql` is fully idempotent
+     (`CREATE … IF NOT EXISTS` / `INSERT OR IGNORE`), so missing tables/columns/seeds
+     are re-created automatically. If a table is missing (e.g. `no such table` errors),
+     simply run this command to repair it.
 
    The database file is created at `database/crm.sqlite` (git-ignored).
 
@@ -76,6 +82,16 @@ crm/
    Then visit `http://localhost:8000` and log in with the demo credentials above.
 
 ## Extending it
+
+## Extending the database
+
+- **New table / index / trigger** → add it to `database/schema.sql`, then run `php database/migrate.php`.
+  schema.sql is re-applied on every run, so new tables appear on both fresh and existing DBs.
+- **Structural change to an existing table** (e.g. `ALTER TABLE … ADD COLUMN`) → create a new
+  numbered file `database/migrations/NNN_name.sql`; the runner applies it exactly once and records
+  it in the `_migrations` table. See `database/migrations/README.md`.
+
+## Extending the app
 
 Adding a new resource (say, "Tasks") follows the same 4 steps every time:
 
