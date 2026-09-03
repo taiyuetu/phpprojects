@@ -184,8 +184,12 @@ class OrderController extends Controller
         // Check if order already exists for this deal
         $existingOrders = $this->model('Order')->byDeal((int) $dealId);
         if (!empty($existingOrders)) {
-            $this->setFlash('error', '该商机已有订单。');
-            $this->redirect('/orders');
+            // 已有订单，确保商机已归档
+            if (!$deal['archived']) {
+                $this->model('Deal')->archive((int) $dealId);
+            }
+            $this->setFlash('success', '该商机已有订单，已自动归档。');
+            $this->redirect('/deals/archived');
             return;
         }
 

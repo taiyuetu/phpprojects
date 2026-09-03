@@ -128,6 +128,19 @@ class DealController extends Controller
             return;
         }
 
+        // ==========================================
+        // 兜底：如果商机已是 closed_won 且有订单但未归档，补归档
+        // ==========================================
+        if ($data['stage'] === 'closed_won' && !$oldDeal['archived']) {
+            $existingOrders = $this->model('Order')->byDeal((int) $id);
+            if (!empty($existingOrders)) {
+                $dealModel->archive((int) $id);
+                $this->setFlash('success', '商机已归档。');
+                $this->redirect('/deals/archived');
+                return;
+            }
+        }
+
         $this->setFlash('success', '商机已更新。');
         $this->redirect('/deals');
     }
