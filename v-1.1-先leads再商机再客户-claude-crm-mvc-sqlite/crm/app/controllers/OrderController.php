@@ -202,6 +202,9 @@ class OrderController extends Controller
             'owner_id'     => $_SESSION['user_id'],
         ]);
 
+        // Copy attachments from deal to order
+        $this->model('Attachment')->copyTo('deal', (int) $deal['id'], 'order', (int) $orderId, (int) $_SESSION['user_id']);
+
         $this->setFlash('success', '订单已从商机创建。');
         $this->redirect('/orders/' . $orderId);
     }
@@ -242,9 +245,9 @@ class OrderController extends Controller
             return;
         }
 
-        if (empty($_FILES['attachment'])) {
+        if (empty($_FILES['attachment']) || $_FILES['attachment']['error'] === UPLOAD_ERR_NO_FILE) {
             $this->setFlash('error', '请选择要上传的文件。');
-            $this->redirect('/orders/' . $id . '/edit');
+            $this->redirect('/orders/' . $id);
             return;
         }
 
@@ -261,7 +264,7 @@ class OrderController extends Controller
             $this->setFlash('error', $result['error']);
         }
 
-        $this->redirect('/orders/' . $id . '/edit');
+        $this->redirect('/orders/' . $id);
     }
 
     /**
@@ -284,13 +287,13 @@ class OrderController extends Controller
 
         if (!$attachment || $attachment['related_type'] !== 'order' || (int) $attachment['related_id'] !== (int) $orderId) {
             $this->setFlash('error', '附件不存在。');
-            $this->redirect('/orders/' . $orderId . '/edit');
+            $this->redirect('/orders/' . $orderId);
             return;
         }
 
         $attachmentModel->remove((int) $attachmentId);
         $this->setFlash('success', '附件已删除。');
-        $this->redirect('/orders/' . $orderId . '/edit');
+        $this->redirect('/orders/' . $orderId);
     }
 
     private function validate(array $input): array

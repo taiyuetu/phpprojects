@@ -19,6 +19,22 @@ class Attachment extends Model
         'application/x-rar-compressed'                                                          => 'rar',
     ];
 
+    /** Extension to MIME type mapping (for fallback detection). */
+    private const EXT_TO_MIME = [
+        'jpg'  => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+        'png'  => 'image/png',
+        'gif'  => 'image/gif',
+        'webp' => 'image/webp',
+        'pdf'  => 'application/pdf',
+        'xls'  => 'application/vnd.ms-excel',
+        'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'ods'  => 'application/vnd.oasis.opendocument.spreadsheet',
+        'csv'  => 'text/csv',
+        'zip'  => 'application/zip',
+        'rar'  => 'application/x-rar-compressed',
+    ];
+
     /** Max file size: 20 MB. */
     private const MAX_SIZE = 20 * 1024 * 1024;
 
@@ -44,6 +60,26 @@ class Attachment extends Model
     }
 
     /**
+     * Detect MIME type from file content or extension.
+     * Uses finfo when available, falls back to extension-based detection.
+     */
+    private function detectMimeType(string $filePath, string $originalName): string
+    {
+        // Try finfo first if available
+        if (class_exists('finfo')) {
+            $finfo = new finfo(FILEINFO_MIME_TYPE);
+            $mime = $finfo->file($filePath);
+            if ($mime && $mime !== 'application/octet-stream') {
+                return $mime;
+            }
+        }
+
+        // Fallback: detect from file extension
+        $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+        return self::EXT_TO_MIME[$ext] ?? 'application/octet-stream';
+    }
+
+    /**
      * Process and store an uploaded file.
      *
      * @param array $file $_FILES entry
@@ -56,7 +92,16 @@ class Attachment extends Model
     {
         // Validate upload error
         if ($file['error'] !== UPLOAD_ERR_OK) {
-            return ['success' => false, 'error' => '文件上传失败，错误码：' . $file['error']];
+            $errorMessages = [
+                UPLOAD_ERR_INI_SIZE   => '文件超过了服务器限制（最大2MB）。',
+                UPLOAD_ERR_FORM_SIZE  => '文件超过了表单限制。',
+                UPLOAD_ERR_PARTIAL    => '文件只有部分被上传。',
+                UPLOAD_ERR_NO_TMP_DIR => '服务器临时目录缺失。',
+                UPLOAD_ERR_CANT_WRITE => '文件写入磁盘失败。',
+                UPLOAD_ERR_EXTENSION  => 'PHP扩展停止了文件上传。',
+            ];
+            $msg = $errorMessages[$file['error']] ?? '文件上传失败，错误码：' . $file['error'];
+            return ['success' => false, 'error' => $msg];
         }
 
         // Validate file size
@@ -64,12 +109,11 @@ class Attachment extends Model
             return ['success' => false, 'error' => '文件大小不能超过20MB。'];
         }
 
-        // Validate MIME type
-        $finfo = new finfo(FILEINFO_MIME_TYPE);
-        $mimeType = $finfo->file($file['tmp_name']);
+        // Validate MIME type (from content or extension)
+        $mimeType = $this->detectMimeType($file['tmp_name'], $file['name']);
 
         if (!isset(self::ALLOWED_TYPES[$mimeType])) {
-            return ['success' => false, 'error' => '不支持的文件类型：' . $mimeType . '。允许：图片、PDF、Excel、CSV、压缩包。'];
+            return ['success' => false, 'error' => '不支持的文件类型。允许：图片、PDF、Excel、CSV、压缩包。'];
         }
 
         // Generate unique filename
@@ -111,6 +155,38 @@ class Attachment extends Model
              WHERE a.related_type = :type AND a.related_id = :id
              ORDER BY a.created_at DESC"
         )->bind(':type', $relatedType)->bind(':id', $relatedId)->resultSet();
+    }
+
+    /**
+     * Copy all attachments from one related entity to another.
+     * Used when converting a deal to an order.
+     *
+     * @param string $fromType Source type (e.g. 'deal')
+     * @param int $fromId Source ID
+     * @param string $toType Target type (e.g. 'order')
+     * @param int $toId Target ID
+     * @param int $userId User performing the copy
+     * @return int Number of attachments copied
+     */
+    public function copyTo(string $fromType, int $fromId, string $toType, int $toId, int $userId): int
+    {
+        $attachments = $this->byRelated($fromType, $fromId);
+        $count = 0;
+
+        foreach ($attachments as $att) {
+            $this->create([
+                'related_type'  => $toType,
+                'related_id'    => $toId,
+                'filename'      => $att['filename'],
+                'original_name' => $att['original_name'],
+                'mime_type'     => $att['mime_type'],
+                'file_size'     => $att['file_size'],
+                'uploaded_by'   => $userId,
+            ]);
+            $count++;
+        }
+
+        return $count;
     }
 
     /**
