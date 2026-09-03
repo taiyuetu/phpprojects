@@ -74,6 +74,7 @@ class DealController extends Controller
             'deal' => $deal,
             'customers' => $this->model('Customer')->all('name ASC'),
             'orders' => $dealModel->orders((int) $id),
+            'attachments' => $this->model('Attachment')->byRelated('deal', (int) $id),
             'csrf' => $this->csrfToken(),
             'errors' => [],
         ]);
@@ -201,6 +202,72 @@ class DealController extends Controller
         $dealModel->delete((int) $id);
         $this->setFlash('success', '商机已删除。');
         $this->redirect('/deals');
+    }
+
+    /**
+     * Upload attachment for a deal.
+     */
+    public function uploadAttachment(string $id): void
+    {
+        $this->requireAuth();
+        $this->verifyCsrf();
+
+        $deal = $this->model('Deal')->find((int) $id);
+        if (!$deal) {
+            $this->setFlash('error', '商机不存在。');
+            $this->redirect('/deals');
+            return;
+        }
+
+        if (empty($_FILES['attachment'])) {
+            $this->setFlash('error', '请选择要上传的文件。');
+            $this->redirect('/deals/' . $id . '/edit');
+            return;
+        }
+
+        $result = $this->model('Attachment')->upload(
+            $_FILES['attachment'],
+            'deal',
+            (int) $id,
+            (int) $_SESSION['user_id']
+        );
+
+        if ($result['success']) {
+            $this->setFlash('success', '附件上传成功。');
+        } else {
+            $this->setFlash('error', $result['error']);
+        }
+
+        $this->redirect('/deals/' . $id . '/edit');
+    }
+
+    /**
+     * Delete attachment from a deal.
+     */
+    public function deleteAttachment(string $dealId, string $attachmentId): void
+    {
+        $this->requireAuth();
+        $this->verifyCsrf();
+
+        $deal = $this->model('Deal')->find((int) $dealId);
+        if (!$deal) {
+            $this->setFlash('error', '商机不存在。');
+            $this->redirect('/deals');
+            return;
+        }
+
+        $attachmentModel = $this->model('Attachment');
+        $attachment = $attachmentModel->find((int) $attachmentId);
+
+        if (!$attachment || $attachment['related_type'] !== 'deal' || (int) $attachment['related_id'] !== (int) $dealId) {
+            $this->setFlash('error', '附件不存在。');
+            $this->redirect('/deals/' . $dealId . '/edit');
+            return;
+        }
+
+        $attachmentModel->remove((int) $attachmentId);
+        $this->setFlash('success', '附件已删除。');
+        $this->redirect('/deals/' . $dealId . '/edit');
     }
 
     private function validate(array $input): array

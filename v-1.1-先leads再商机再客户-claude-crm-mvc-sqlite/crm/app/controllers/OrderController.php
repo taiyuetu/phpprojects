@@ -84,9 +84,10 @@ class OrderController extends Controller
         }
 
         $this->view('orders/show', [
-            'order' => $order,
-            'items' => $this->model('OrderItem')->byOrder((int) $id),
-            'csrf'  => $this->csrfToken(),
+            'order'       => $order,
+            'items'       => $this->model('OrderItem')->byOrder((int) $id),
+            'attachments' => $this->model('Attachment')->byRelated('order', (int) $id),
+            'csrf'        => $this->csrfToken(),
         ]);
     }
 
@@ -103,12 +104,13 @@ class OrderController extends Controller
         }
 
         $this->view('orders/edit', [
-            'order'     => $order,
-            'customers' => $this->model('Customer')->all('name ASC'),
-            'deals'     => $this->model('Deal')->allWithCustomer(),
-            'items'     => $this->model('OrderItem')->byOrder((int) $id),
-            'csrf'      => $this->csrfToken(),
-            'errors'    => [],
+            'order'       => $order,
+            'customers'   => $this->model('Customer')->all('name ASC'),
+            'deals'       => $this->model('Deal')->allWithCustomer(),
+            'items'       => $this->model('OrderItem')->byOrder((int) $id),
+            'attachments' => $this->model('Attachment')->byRelated('order', (int) $id),
+            'csrf'        => $this->csrfToken(),
+            'errors'      => [],
         ]);
     }
 
@@ -223,6 +225,72 @@ class OrderController extends Controller
             }
         }
         return $items;
+    }
+
+    /**
+     * Upload attachment for an order.
+     */
+    public function uploadAttachment(string $id): void
+    {
+        $this->requireAuth();
+        $this->verifyCsrf();
+
+        $order = $this->model('Order')->find((int) $id);
+        if (!$order) {
+            $this->setFlash('error', '订单不存在。');
+            $this->redirect('/orders');
+            return;
+        }
+
+        if (empty($_FILES['attachment'])) {
+            $this->setFlash('error', '请选择要上传的文件。');
+            $this->redirect('/orders/' . $id . '/edit');
+            return;
+        }
+
+        $result = $this->model('Attachment')->upload(
+            $_FILES['attachment'],
+            'order',
+            (int) $id,
+            (int) $_SESSION['user_id']
+        );
+
+        if ($result['success']) {
+            $this->setFlash('success', '附件上传成功。');
+        } else {
+            $this->setFlash('error', $result['error']);
+        }
+
+        $this->redirect('/orders/' . $id . '/edit');
+    }
+
+    /**
+     * Delete attachment from an order.
+     */
+    public function deleteAttachment(string $orderId, string $attachmentId): void
+    {
+        $this->requireAuth();
+        $this->verifyCsrf();
+
+        $order = $this->model('Order')->find((int) $orderId);
+        if (!$order) {
+            $this->setFlash('error', '订单不存在。');
+            $this->redirect('/orders');
+            return;
+        }
+
+        $attachmentModel = $this->model('Attachment');
+        $attachment = $attachmentModel->find((int) $attachmentId);
+
+        if (!$attachment || $attachment['related_type'] !== 'order' || (int) $attachment['related_id'] !== (int) $orderId) {
+            $this->setFlash('error', '附件不存在。');
+            $this->redirect('/orders/' . $orderId . '/edit');
+            return;
+        }
+
+        $attachmentModel->remove((int) $attachmentId);
+        $this->setFlash('success', '附件已删除。');
+        $this->redirect('/orders/' . $orderId . '/edit');
     }
 
     private function validate(array $input): array

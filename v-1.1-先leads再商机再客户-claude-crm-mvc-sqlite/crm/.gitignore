@@ -5,3 +5,7 @@ database/crm.sqlite-shm
 
 # Environment
 .env
+
+# Uploaded files (keep directory structure)
+public/uploads/attachments/*
+!public/uploads/attachments/.gitkeep

@@ -1,3 +1,9 @@
+<?php
+// Set variables for attachment partial
+$relatedType = 'order';
+$relatedId = (int) $order['id'];
+?>
+
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h3 class="mb-0"><?= e($order['order_number']) ?></h3>
@@ -97,6 +103,9 @@
     </div>
 
     <div class="col-lg-8">
+        <!-- 附件 -->
+        <?php include APP_PATH . '/views/partials/_attachments.php'; ?>
+
         <!-- 商品明细 -->
         <div class="card card-table p-3 mb-3">
             <div class="d-flex justify-content-between align-items-center mb-3">

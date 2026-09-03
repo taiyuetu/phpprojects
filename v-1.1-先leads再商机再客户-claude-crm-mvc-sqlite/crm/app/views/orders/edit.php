@@ -1,3 +1,9 @@
+<?php
+// Set variables for attachment partial
+$relatedType = 'order';
+$relatedId = (int) $order['id'];
+?>
+
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h3 class="mb-0">编辑订单</h3>
     <a href="<?= url('/orders/' . $order['id']) ?>" class="btn btn-outline-secondary btn-sm">返回详情</a>
@@ -16,6 +22,11 @@
         <?php include __DIR__ . '/_form.php'; ?>
         <button type="submit" class="btn btn-primary mt-3">保存修改</button>
     </form>
+</div>
+
+<!-- 附件 -->
+<div style="max-width:1000px;">
+    <?php include APP_PATH . '/views/partials/_attachments.php'; ?>
 </div>
 
 <?php include __DIR__ . '/_items_js.php'; ?>

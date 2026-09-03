@@ -1,3 +1,9 @@
+<?php
+// Set variables for attachment partial
+$relatedType = 'deal';
+$relatedId = (int) $deal['id'];
+?>
+
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h3 class="mb-0">编辑商机</h3>
     <a href="<?= url('/deals') ?>" class="btn btn-outline-secondary btn-sm">返回看板</a>
@@ -19,6 +25,9 @@
                 <button type="submit" class="btn btn-primary mt-3">保存修改</button>
             </form>
         </div>
+
+        <!-- 附件 -->
+        <?php include APP_PATH . '/views/partials/_attachments.php'; ?>
     </div>
 
     <div class="col-lg-4">

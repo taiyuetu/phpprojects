@@ -45,6 +45,8 @@ $router->get('/deals/{id}/edit', 'DealController@edit');
 $router->put('/deals/{id}', 'DealController@update');
 $router->delete('/deals/{id}', 'DealController@destroy');
 $router->post('/deals/{id}/create-order', 'OrderController@createFromDeal');
+$router->post('/deals/{id}/attachments', 'DealController@uploadAttachment');
+$router->post('/deals/{id}/attachments/{attachmentId}/delete', 'DealController@deleteAttachment');
 
 // ---- Orders ----
 $router->get('/orders', 'OrderController@index');
@@ -54,3 +56,5 @@ $router->get('/orders/{id}', 'OrderController@show');
 $router->get('/orders/{id}/edit', 'OrderController@edit');
 $router->put('/orders/{id}', 'OrderController@update');
 $router->delete('/orders/{id}', 'OrderController@destroy');
+$router->post('/orders/{id}/attachments', 'OrderController@uploadAttachment');
+$router->post('/orders/{id}/attachments/{attachmentId}/delete', 'OrderController@deleteAttachment');
