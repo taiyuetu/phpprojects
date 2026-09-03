@@ -2,13 +2,9 @@
 /**
  * Attachment upload and list component.
  * Required variables: $relatedType ('deal'|'order'), $relatedId (int), $csrf (string)
- * Optional: $attachments (array, loaded by controller)
+ * Required: $attachments (array, loaded by the controller — views never query the DB)
  */
 $attachments = $attachments ?? [];
-$attachmentModel = new Attachment();
-if (empty($attachments)) {
-    $attachments = $attachmentModel->byRelated($relatedType, $relatedId);
-}
 ?>
 
 <div class="card card-table p-3 mt-3">

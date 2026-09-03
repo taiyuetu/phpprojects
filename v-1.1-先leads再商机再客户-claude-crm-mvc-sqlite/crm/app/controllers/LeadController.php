@@ -27,7 +27,6 @@ class LeadController extends Controller
     public function create(): void
     {
         $this->requireAuth();
-        $this->model('Lead'); // load class for static lostReasonOptions() in _form.php
 
         $this->view('leads/create', [
             'csrf' => $this->csrfToken(),
@@ -44,7 +43,6 @@ class LeadController extends Controller
         [$data, $errors] = $this->validate($_POST);
 
         if ($errors) {
-            $this->model('Lead'); // Load class for static lostReasonOptions() in _form.php
             $this->view('leads/create', [
                 'csrf' => $this->csrfToken(),
                 'old' => $_POST,
@@ -201,7 +199,6 @@ class LeadController extends Controller
     {
         $this->requireAuth();
         $this->verifyCsrf();
-        $this->model('Lead'); // load class for static lostReasonOptions()
 
         $lead = $this->model('Lead')->find((int) $id);
         if (!$lead) {
@@ -231,7 +228,6 @@ class LeadController extends Controller
     {
         $this->requireAuth();
         $this->verifyCsrf();
-        $this->model('Lead');
 
         $lead = $this->model('Lead')->find((int) $id);
 

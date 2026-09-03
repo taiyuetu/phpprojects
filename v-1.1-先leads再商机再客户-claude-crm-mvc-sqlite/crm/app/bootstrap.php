@@ -11,6 +11,9 @@ define('BASE_PATH', dirname(__DIR__));
 // Set timezone to Asia/Shanghai (UTC+8)
 date_default_timezone_set('Asia/Shanghai');
 
+// ---- Class autoloader (core / models / controllers) ----
+require APP_PATH . '/core/autoloader.php';
+
 require APP_PATH . '/config/config.php';
 
 // ---- Detect URL_ROOT (the sub-path the app is served from) ----

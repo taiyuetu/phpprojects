@@ -81,6 +81,32 @@ crm/
    ```
    Then visit `http://localhost:8000` and log in with the demo credentials above.
 
+## Testing
+
+The project ships with a zero-dependency test suite (no Composer/PHPUnit needed —
+just the PHP CLI, same requirement as the app itself). Each case runs in its own
+process against a throwaway SQLite database built by `database/migrate.php`.
+
+```bash
+php tests/run.php                  # run every case
+php tests/run.php Order            # run one case by name filter
+php tests/cases/OrderTest.php      # run a single case directly
+```
+
+The suite covers the model layer (CRUD, status transitions, archive lifecycle,
+item sync), the autoloader regression (views calling model static helpers with no
+controller pre-loading), attachment copy-on-convert, and an HTTP smoke test that
+logs in through the real Router → Controller → View stack.
+
+## Architecture notes
+
+- **Autoloading** — `app/core/autoloader.php` registers an `spl_autoload_register`
+  that maps class names to `core/`, `models/` and `controllers/`. Views may call
+  model static helpers (`Order::statusLabel()`, `Attachment::fileIcon()`…) safely;
+  controllers never need to "pre-load" classes before rendering.
+- **Views are dumb** — they never instantiate models or query the DB; controllers
+  pass every array they need (including attachments).
+
 ## Extending it
 
 ## Extending the database
@@ -95,7 +121,7 @@ crm/
 
 Adding a new resource (say, "Tasks") follows the same 4 steps every time:
 
-1. Add a table to `database/schema.sql`
+1. Add a table to `database/schema.sql`, run `php database/migrate.php`
 2. Create `app/models/Task.php extends Model` with `protected string $table = 'tasks';`
 3. Create `app/controllers/TaskController.php extends Controller` with `index/create/store/edit/update/destroy`
 4. Register the routes in `app/routes.php` and add views under `app/views/tasks/`

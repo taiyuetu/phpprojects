@@ -21,8 +21,6 @@ class DealController extends Controller
     {
         $this->requireAuth();
 
-        $this->model('OrderItem'); // Load class for static unitOptions() in _form.php
-
         $this->view('deals/create', [
             'customers' => $this->model('Customer')->all('name ASC'),
             'csrf' => $this->csrfToken(),
@@ -39,7 +37,6 @@ class DealController extends Controller
         [$data, $errors] = $this->validate($_POST);
 
         if ($errors) {
-            $this->model('OrderItem'); // Load class for static unitOptions() in _form.php
             $this->view('deals/create', [
                 'customers' => $this->model('Customer')->all('name ASC'),
                 'csrf' => $this->csrfToken(),
@@ -62,7 +59,6 @@ class DealController extends Controller
         $this->requireAuth();
 
         $dealModel = $this->model('Deal');
-        $this->model('OrderItem'); // Load class for static unitOptions() in _form.php
         $deal = $dealModel->find((int) $id);
         if (!$deal) {
             $this->setFlash('error', '商机不存在。');
@@ -100,6 +96,7 @@ class DealController extends Controller
                 'deal' => array_merge(['id' => $id], $_POST),
                 'customers' => $this->model('Customer')->all('name ASC'),
                 'orders' => $dealModel->orders((int) $id),
+                'attachments' => $this->model('Attachment')->byRelated('deal', (int) $id),
                 'csrf' => $this->csrfToken(),
                 'errors' => $errors,
             ]);

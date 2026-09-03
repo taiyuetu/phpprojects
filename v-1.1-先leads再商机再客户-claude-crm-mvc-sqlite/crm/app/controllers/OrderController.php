@@ -28,7 +28,6 @@ class OrderController extends Controller
     public function create(): void
     {
         $this->requireAuth();
-        $this->model('OrderItem'); // Load class for static unitOptions() in _form.php
 
         $this->view('orders/create', [
             'customers' => $this->model('Customer')->all('name ASC'),
@@ -94,7 +93,6 @@ class OrderController extends Controller
     public function edit(string $id): void
     {
         $this->requireAuth();
-        $this->model('OrderItem'); // Load class for static unitOptions() in _form.php
 
         $order = $this->model('Order')->find((int) $id);
         if (!$order) {
@@ -135,6 +133,7 @@ class OrderController extends Controller
                 'customers' => $this->model('Customer')->all('name ASC'),
                 'deals'     => $this->model('Deal')->allWithCustomer(),
                 'items'     => $this->model('OrderItem')->byOrder((int) $id),
+                'attachments' => $this->model('Attachment')->byRelated('order', (int) $id),
                 'csrf'      => $this->csrfToken(),
                 'errors'    => $errors,
             ]);
