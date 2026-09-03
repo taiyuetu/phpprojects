@@ -1,7 +1,7 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h3 class="mb-0">已归档商机</h3>
-        <div class="text-muted small">成交后自动归档的商机，保留历史数据供查阅。</div>
+        <div class="text-muted small">丢单后自动归档的商机，保留历史数据供查阅。</div>
     </div>
     <a href="<?= url('/deals') ?>" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> 返回看板</a>
 </div>
@@ -20,7 +20,7 @@
                         <th>商机名称</th>
                         <th>客户</th>
                         <th>金额</th>
-                        <th>成交时间</th>
+                        <th>丢单/归档时间</th>
                         <th>关联订单</th>
                         <th>操作</th>
                     </tr>
@@ -31,7 +31,7 @@
                             <td class="fw-semibold"><?= e($d['title']) ?></td>
                             <td><?= e($d['customer_name'] ?? '—') ?></td>
                             <td><?= money($d['value']) ?></td>
-                            <td><?= formatDate($d['stage_closed_won_at'] ?? $d['archived_at'], 'Y-m-d H:i') ?></td>
+                            <td><?= formatDate($d['stage_closed_lost_at'] ?? $d['archived_at'], 'Y-m-d H:i') ?></td>
                             <td>
                                 <?php
                                 $orders = $this->model('Deal')->orders((int) $d['id']);

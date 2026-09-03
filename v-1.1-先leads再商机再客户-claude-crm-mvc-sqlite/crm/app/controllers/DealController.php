@@ -112,30 +112,26 @@ class DealController extends Controller
         $dealModel->update((int) $id, $data);
 
         // ==========================================
-        // 当商机变为 closed_won（成交）时，自动创建订单并归档商机
+        // 商机变更为 closed_won（成交）：自动创建订单，但不再归档，
+        // 商机保留在看板的"成交"列供查阅。
         // ==========================================
         if ($oldDeal['stage'] !== 'closed_won' && $data['stage'] === 'closed_won') {
             $this->autoCreateOrderFromDeal($oldDeal, $_POST);
 
-            // 已转为订单，归档商机（保留历史数据，订单 deal_id 关联不丢失）
-            $dealModel->archive((int) $id);
-
-            $this->setFlash('success', '商机已成交并转为订单，商机已自动归档。');
+            $this->setFlash('success', '商机已成交并自动转为订单。');
             $this->redirect('/orders');
             return;
         }
 
         // ==========================================
-        // 兜底：如果商机已是 closed_won 且有订单但未归档，补归档
+        // 商机变更为 closed_lost（丢单）：自动归档，移出看板
         // ==========================================
-        if ($data['stage'] === 'closed_won' && !$oldDeal['archived']) {
-            $existingOrders = $this->model('Order')->byDeal((int) $id);
-            if (!empty($existingOrders)) {
-                $dealModel->archive((int) $id);
-                $this->setFlash('success', '商机已归档。');
-                $this->redirect('/deals/archived');
-                return;
-            }
+        if ($oldDeal['stage'] !== 'closed_lost' && $data['stage'] === 'closed_lost') {
+            $dealModel->archive((int) $id);
+
+            $this->setFlash('success', '商机已标记为丢单并归档。');
+            $this->redirect('/deals/archived');
+            return;
         }
 
         $this->setFlash('success', '商机已更新。');

@@ -36,7 +36,7 @@ $columns = [
                                 <?php if ($d['stage'] === 'closed_won'): ?>
                                     <form method="POST" action="<?= url('/deals/' . $d['id'] . '/create-order') ?>" class="d-inline">
                                         <input type="hidden" name="csrf_token" value="<?= e(csrf()) ?>">
-                                        <button type="submit" class="btn btn-sm btn-outline-success py-0 px-1" title="创建订单并归档商机">
+                                        <button type="submit" class="btn btn-sm btn-outline-success py-0 px-1" title="创建订单">
                                             <i class="bi bi-receipt"></i>
                                         </button>
                                     </form>

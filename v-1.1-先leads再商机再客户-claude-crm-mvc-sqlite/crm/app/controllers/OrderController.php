@@ -183,12 +183,8 @@ class OrderController extends Controller
         // Check if order already exists for this deal
         $existingOrders = $this->model('Order')->byDeal((int) $dealId);
         if (!empty($existingOrders)) {
-            // 已有订单，确保商机已归档
-            if (!$deal['archived']) {
-                $this->model('Deal')->archive((int) $dealId);
-            }
-            $this->setFlash('success', '该商机已有订单，已自动归档。');
-            $this->redirect('/deals/archived');
+            $this->setFlash('success', '该商机已有订单。');
+            $this->redirect('/orders/' . $existingOrders[0]['id']);
             return;
         }
 
@@ -208,10 +204,7 @@ class OrderController extends Controller
         // Copy attachments from deal to order
         $this->model('Attachment')->copyTo('deal', (int) $deal['id'], 'order', (int) $orderId, (int) $_SESSION['user_id']);
 
-        // 已转为订单，归档商机（保留历史数据，订单 deal_id 关联不丢失）
-        $this->model('Deal')->archive((int) $dealId);
-
-        $this->setFlash('success', '订单已从商机创建，商机已自动归档。');
+        $this->setFlash('success', '订单已从商机创建。');
         $this->redirect('/orders/' . $orderId);
     }
 
