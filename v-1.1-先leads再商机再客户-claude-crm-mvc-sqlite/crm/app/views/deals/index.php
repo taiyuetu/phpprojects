@@ -7,12 +7,12 @@
 </div>
 
 <?php
+// 看板列：丢单(closed_lost)商机会自动归档，不占用看板列。
 $columns = [
     'open'         => '进行中',
     'proposal'     => '方案阶段',
     'negotiation'  => '谈判中',
     'closed_won'   => '成交',
-    'closed_lost'  => '丢单',
 ];
 ?>
 

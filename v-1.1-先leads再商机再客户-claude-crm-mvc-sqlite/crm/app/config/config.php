@@ -35,7 +35,7 @@ define('DB_PATH', $dbPath);
 
 // ---- Application ----
 define('APP_NAME', 'MiniCRM');
-define('APP_VERSION', '1.1.1');
+define('APP_VERSION', '1.2.0');
 define('APP_ENV', getenv('APP_ENV') ?: 'development'); // development | production
 define('APP_DEBUG', APP_ENV === 'development');
 

@@ -10,7 +10,10 @@ directly to the MVC pattern.
 - **Auth** — register / login / logout, bcrypt password hashing, CSRF-protected forms, session-based auth guard
 - **Customers** — full CRUD, search, activity/notes timeline, related leads & deals
 - **Leads** — full CRUD, status filter (new / contacted / qualified / lost), one-click "convert to deal"
-- **Deals** — full CRUD, kanban-style pipeline board grouped by stage, pipeline value totals
+- **Deals** — kanban-style pipeline board grouped by stage, won deals auto-create an order and stay on the board
+- **Orders** — created automatically when a deal is won (or manually), with line-item management and statuses
+- **Attachments** — upload files (images / PDF / Excel / zip) on deals & orders; copied when a deal wins
+- **Archiving** — lost (丢单) deals are auto-archived off the board; archived deals can be restored to 进行中
 - **Dashboard** — key stats (customers, open leads, pipeline value) and recent activity
 - Clean Bootstrap 5 UI, responsive sidebar layout
 
@@ -21,7 +24,7 @@ crm/
 ├── app/
 │   ├── config/config.php     # DB path & app settings (env-var driven)
 │   ├── core/                 # The "framework": Router, Controller, Model, Database, helpers
-│   ├── controllers/          # One controller per resource (Auth, Dashboard, Customer, Lead, Deal)
+│   ├── controllers/          # One controller per resource (Auth, Dashboard, Customer, Lead, Deal, Order)
 │   ├── models/                # One model per DB table, extends core/Model.php
 │   ├── views/                 # Plain PHP templates, grouped by resource + layouts/
 │   ├── routes.php             # Single source of truth for every URL
@@ -42,6 +45,20 @@ crm/
 - **One front controller** — `public/index.php` is the only PHP entry point, so there's one place requests are ever intercepted (logging, middleware, etc.).
 - **Views are dumb templates** — no business logic in views beyond loops/conditionals; controllers prepare all data first.
 - **PDO + prepared statements everywhere** — no raw string-built SQL, so adding fields is just adding to an array.
+
+## Deal lifecycle rules (商机流转规则)
+
+The pipeline works like this:
+
+| Event | What the system does |
+|---|---|
+| Stage → **成交** (won) | Auto-creates an **order** from the deal + item lines; the deal is **NOT archived** and stays in the 成交 column for reference |
+| Stage → **丢单** (lost) | The deal is **auto-archived** and removed from the kanban board |
+| Archive page → **恢复** | The deal is unarchived **and reset to 进行中** (open) so it can be followed up again |
+
+Notes:
+- The board has no 丢单 column — lost deals only live in the archived list.
+- A won deal with an existing order will not create a duplicate order.
 
 ## Requirements
 
@@ -106,8 +123,6 @@ logs in through the real Router → Controller → View stack.
   controllers never need to "pre-load" classes before rendering.
 - **Views are dumb** — they never instantiate models or query the DB; controllers
   pass every array they need (including attachments).
-
-## Extending it
 
 ## Extending the database
 

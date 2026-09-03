@@ -338,10 +338,12 @@
             <tr><td><span class="badge text-bg-primary">进行中</span></td><td>初步接触，尚未出方案</td></tr>
             <tr><td><span class="badge text-bg-info">方案阶段</span></td><td>已提交方案或报价</td></tr>
             <tr><td><span class="badge text-bg-warning">谈判中</span></td><td>客户正在议价或走审批流程</td></tr>
-            <tr><td><span class="badge text-bg-success">成交</span></td><td>成功签约，<strong>自动生成订单</strong></td></tr>
-            <tr><td><span class="badge text-bg-danger">丢单</span></td><td>未能成交</td></tr>
+            <tr><td><span class="badge text-bg-success">成交</span></td><td>成功签约，<strong>自动生成订单</strong>，商机保留在成交列</td></tr>
+            <tr><td><span class="badge text-bg-danger">丢单</span></td><td>未能成交，<strong>自动归档</strong>并移出看板</td></tr>
         </tbody>
     </table>
+
+    <p class="text-muted small mb-3">看板仅保留 进行中 / 方案阶段 / 谈判中 / 成交 四列；丢单商机进入"已归档"，可在归档页"恢复"后回到"进行中"列继续跟进。</p>
 
     <h6 class="text-muted">商机成交自动创建订单</h6>
     <p>当商机阶段变为"成交"时，系统会<strong>自动创建订单</strong>：</p>
@@ -392,15 +394,11 @@
 <!-- 数据库迁移 -->
 <div class="card card-table p-4 mb-4">
     <h5 class="mb-3"><i class="bi bi-database me-2"></i>数据库说明</h5>
-    <p>系统使用 SQLite 数据库，数据库文件位于 <code>database/crm.sqlite</code>。</p>
-    
-    <h6 class="text-muted">全新安装</h6>
-    <pre class="bg-light p-3 rounded small mb-3"><code>sqlite3 database/crm.sqlite &lt; database/schema.sql</code></pre>
+    <p>系统使用 SQLite 数据库，数据库文件位于 <code>database/crm.sqlite</code>（已被 git 忽略）。</p>
 
-    <h6 class="text-muted">从旧版本升级</h6>
-    <p>如果已有数据库，运行迁移脚本添加新功能：</p>
-    <pre class="bg-light p-3 rounded small mb-0"><code># 添加订单和订单明细表
-php migrate.php</code></pre>
+    <h6 class="text-muted">创建 / 升级 / 修复数据库（推荐）</h6>
+    <p>在项目根目录执行统一迁移入口，幂等、可重复运行，会自动补齐缺失的表与种子数据：</p>
+    <pre class="bg-light p-3 rounded small mb-0"><code>php database/migrate.php</code></pre>
 </div>
 
 <!-- 常见问题 -->

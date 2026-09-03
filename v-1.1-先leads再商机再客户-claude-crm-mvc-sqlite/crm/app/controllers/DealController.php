@@ -9,8 +9,12 @@ class DealController extends Controller
         $deals = $this->model('Deal')->allWithCustomer();
 
         // Group by stage for a simple kanban-style board.
-        $stages = ['open' => [], 'proposal' => [], 'negotiation' => [], 'closed_won' => [], 'closed_lost' => []];
+        // 丢单(closed_lost)商机会自动归档，不占用看板列。
+        $stages = ['open' => [], 'proposal' => [], 'negotiation' => [], 'closed_won' => []];
         foreach ($deals as $deal) {
+            if (!array_key_exists($deal['stage'], $stages)) {
+                continue; // 兜底：忽略归档/未归档列表之外的阶段
+            }
             $stages[$deal['stage']][] = $deal;
         }
 
@@ -236,7 +240,7 @@ class DealController extends Controller
         $this->view('deals/archived', ['deals' => $deals]);
     }
 
-    /** 取消归档 */
+    /** 取消归档 —— 丢单商机恢复后回到"进行中"列继续跟进 */
     public function unarchive(string $id): void
     {
         $this->requireAuth();
@@ -250,8 +254,10 @@ class DealController extends Controller
             return;
         }
 
+        // 看板没有"丢单"列：model::unarchive() 会把商机重置回"进行中"(open)。
         $dealModel->unarchive((int) $id);
-        $this->setFlash('success', '商机已取消归档，恢复到看板中。');
+
+        $this->setFlash('success', '商机已恢复，回到"进行中"列。');
         $this->redirect('/deals');
     }
 

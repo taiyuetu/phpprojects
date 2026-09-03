@@ -65,12 +65,15 @@ class Deal extends Model
         ]);
     }
 
-    /** 取消归档 */
+    /** 取消归档：恢复为“进行中”(open)，清除丢单标记与归档信息 */
     public function unarchive(int $id): bool
     {
         return $this->update($id, [
-            'archived'    => 0,
-            'archived_at' => null,
+            'archived'             => 0,
+            'archived_at'          => null,
+            'stage'                => 'open',
+            'stage_open_at'        => date('Y-m-d H:i:s'),
+            'stage_closed_lost_at' => null,
         ]);
     }
 }

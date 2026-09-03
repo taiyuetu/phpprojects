@@ -48,7 +48,7 @@
                             <td>
                                 <form method="POST" action="<?= url('/deals/' . $d['id'] . '/unarchive') ?>" class="d-inline">
                                     <input type="hidden" name="csrf_token" value="<?= e(csrf()) ?>">
-                                    <button type="submit" class="btn btn-sm btn-outline-primary py-0 px-1" title="取消归档，恢复到看板">
+                                    <button type="submit" class="btn btn-sm btn-outline-primary py-0 px-1" title="恢复商机，回到看板的进行中列">
                                         <i class="bi bi-arrow-counterclockwise"></i> 恢复
                                     </button>
                                 </form>

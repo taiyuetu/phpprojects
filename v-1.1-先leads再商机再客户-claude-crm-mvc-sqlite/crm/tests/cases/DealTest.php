@@ -56,6 +56,33 @@ function test_deal_archive_unarchive(): void
     assertEquals(0, (int) $d->find((int) $row['id'])['archived'], 'back on board');
 }
 
+function test_unarchive_lost_deal_returns_to_open(): void
+{
+    $cust = seedCustomer('Reopen C');
+    $row = seedDeal((int) $cust['id'], ['stage' => 'closed_lost']);
+    $d = new Deal();
+
+    // Mark closed_lost -> archived (as the controller update flow does).
+    assertTrue($d->archive((int) $row['id']), 'lost deal archived');
+    $lost = $d->find((int) $row['id']);
+    assertEquals('closed_lost', $lost['stage'], 'stage is closed_lost');
+    assertEquals(1, (int) $lost['archived'], 'archived');
+
+    // Unarchive should send it back to "进行中" (open), not the lost column.
+    assertTrue($d->unarchive((int) $row['id']), 'unarchive ok');
+    $back = $d->find((int) $row['id']);
+    assertEquals('open', $back['stage'], 'restored deal is open (进行中)');
+    assertEquals(0, (int) $back['archived'], 'restored deal not archived');
+    assertEquals(null, $back['archived_at'], 'archived_at cleared');
+    assertEquals(null, $back['stage_closed_lost_at'], 'closed_lost_at cleared');
+    assertTrue(!empty($back['stage_open_at']), 'stage_open_at re-recorded');
+
+    // Now visible on the board again under open.
+    $board = $d->allWithCustomer();
+    assertEquals(1, count($board), 'deal back on board');
+    assertEquals('open', $board[0]['stage'], 'board row stage is open');
+}
+
 function test_deal_orders_lookup(): void
 {
     $cust = seedCustomer('Ord C');
