@@ -44,6 +44,7 @@ class LeadController extends Controller
         [$data, $errors] = $this->validate($_POST);
 
         if ($errors) {
+            $this->model('Lead'); // Load class for static lostReasonOptions() in _form.php
             $this->view('leads/create', [
                 'csrf' => $this->csrfToken(),
                 'old' => $_POST,

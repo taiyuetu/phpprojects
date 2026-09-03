@@ -21,6 +21,8 @@ class DealController extends Controller
     {
         $this->requireAuth();
 
+        $this->model('OrderItem'); // Load class for static unitOptions() in _form.php
+
         $this->view('deals/create', [
             'customers' => $this->model('Customer')->all('name ASC'),
             'csrf' => $this->csrfToken(),
@@ -37,6 +39,7 @@ class DealController extends Controller
         [$data, $errors] = $this->validate($_POST);
 
         if ($errors) {
+            $this->model('OrderItem'); // Load class for static unitOptions() in _form.php
             $this->view('deals/create', [
                 'customers' => $this->model('Customer')->all('name ASC'),
                 'csrf' => $this->csrfToken(),
