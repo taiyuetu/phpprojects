@@ -183,8 +183,14 @@ class OrderController extends Controller
         // Check if order already exists for this deal
         $existingOrders = $this->model('Order')->byDeal((int) $dealId);
         if (!empty($existingOrders)) {
+            // Ensure attachments are copied even for previously created orders
+            $existingOrderId = (int) $existingOrders[0]['id'];
+            $existingAtts = $this->model('Attachment')->byRelated('order', $existingOrderId);
+            if (empty($existingAtts)) {
+                $this->model('Attachment')->copyTo('deal', (int) $deal['id'], 'order', $existingOrderId, (int) $_SESSION['user_id']);
+            }
             $this->setFlash('success', '该商机已有订单。');
-            $this->redirect('/orders/' . $existingOrders[0]['id']);
+            $this->redirect('/orders/' . $existingOrderId);
             return;
         }
 

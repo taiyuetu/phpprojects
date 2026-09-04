@@ -39,12 +39,14 @@ CREATE TABLE IF NOT EXISTS customers (
     email                     TEXT,
     phone                     TEXT,
     whatsapp                  TEXT,
+    wechat                    TEXT,
     facebook                  TEXT,
     tiktok                    TEXT,
     website                   TEXT,
     source_country            TEXT,
     source_city               TEXT,
     address                   TEXT,
+    shipping_address          TEXT,
     first_purchase_from_china INTEGER NOT NULL DEFAULT 0,
     has_import_capability     INTEGER NOT NULL DEFAULT 0,
     conversion_time           TEXT,
@@ -213,7 +215,7 @@ CREATE TABLE IF NOT EXISTS activities (
 -- ---------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS attachments (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    related_type  TEXT NOT NULL CHECK (related_type IN ('deal','order')),
+    related_type  TEXT NOT NULL CHECK (related_type IN ('deal','order','customer')),
     related_id    INTEGER NOT NULL,
     filename      TEXT NOT NULL,
     original_name TEXT NOT NULL,

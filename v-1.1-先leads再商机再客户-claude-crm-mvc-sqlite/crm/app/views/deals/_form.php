@@ -7,11 +7,11 @@
     </div>
     <div class="col-md-4">
         <label class="form-label">客户 *</label>
-        <select name="customer_id" class="form-select" required>
+        <select name="customer_id" id="customer-select-deal" class="form-select" required>
             <option value="">选择客户…</option>
             <?php foreach ($customers as $c): ?>
                 <option value="<?= (int) $c['id'] ?>" <?= (int) ($d['customer_id'] ?? 0) === (int) $c['id'] ? 'selected' : '' ?>>
-                    <?= e($c['name']) ?>
+                    <?= e($c['name']) ?><?= $c['company'] ? ' (' . e($c['company']) . ')' : '' ?>
                 </option>
             <?php endforeach; ?>
         </select>
@@ -92,3 +92,14 @@
         <strong class="text-primary fs-5" id="items-total">$0.00</strong>
     </div>
 </div>
+
+<link href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js"></script>
+<script>
+new TomSelect('#customer-select-deal',{
+    create: false,
+    placeholder: '输入关键字搜索客户…',
+    maxOptions: 500,
+    allowEmptyOption: true
+});
+</script>

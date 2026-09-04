@@ -22,6 +22,10 @@
         <input type="text" name="whatsapp" class="form-control" value="<?= e($c['whatsapp'] ?? '') ?>" placeholder="号码或链接">
     </div>
     <div class="col-md-4">
+        <label class="form-label">微信</label>
+        <input type="text" name="wechat" class="form-control" value="<?= e($c['wechat'] ?? '') ?>" placeholder="微信号">
+    </div>
+    <div class="col-md-4">
         <label class="form-label">Facebook 主页</label>
         <input type="url" name="facebook" class="form-control" value="<?= e($c['facebook'] ?? '') ?>" placeholder="https://facebook.com/...">
     </div>
@@ -48,6 +52,10 @@
     <div class="col-md-4">
         <label class="form-label">客户新建/转化时间</label>
         <input type="datetime-local" name="conversion_time" class="form-control" value="<?= e($c['conversion_time'] ?? '') ?>">
+    </div>
+    <div class="col-12">
+        <label class="form-label">收货地址</label>
+        <textarea name="shipping_address" class="form-control" rows="2"><?= e($c['shipping_address'] ?? '') ?></textarea>
     </div>
     <div class="col-md-3">
         <label class="form-label">状态</label>

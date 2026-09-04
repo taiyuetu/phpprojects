@@ -153,7 +153,13 @@ class DealController extends Controller
         // Check if order already exists for this deal
         $existingOrders = $orderModel->byDeal((int) $deal['id']);
         if (!empty($existingOrders)) {
-            return; // Already has order, skip
+            // Ensure attachments are copied even for previously created orders
+            $existingOrderId = (int) $existingOrders[0]['id'];
+            $existingAtts = $this->model('Attachment')->byRelated('order', $existingOrderId);
+            if (empty($existingAtts)) {
+                $this->model('Attachment')->copyTo('deal', (int) $deal['id'], 'order', $existingOrderId, (int) $_SESSION['user_id']);
+            }
+            return;
         }
 
         // Parse items from POST: items[0][product_name], items[0][quantity], etc.

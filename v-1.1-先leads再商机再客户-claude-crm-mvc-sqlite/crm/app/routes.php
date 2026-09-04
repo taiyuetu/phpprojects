@@ -22,6 +22,8 @@ $router->put('/customers/{id}', 'CustomerController@update');
 $router->delete('/customers/{id}', 'CustomerController@destroy');
 $router->post('/customers/{id}/notes', 'CustomerController@addNote');
 $router->post('/customers/{id}/follow-ups', 'CustomerController@addFollowUp');
+$router->post('/customers/{id}/attachments', 'CustomerController@uploadAttachment');
+$router->post('/customers/{id}/attachments/{attachmentId}/delete', 'CustomerController@deleteAttachment');
 
 // ---- Leads ----
 $router->get('/leads', 'LeadController@index');

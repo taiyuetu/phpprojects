@@ -13,11 +13,16 @@ class Customer extends Model
         $params = [];
 
         if ($search !== '') {
-            $sql .= " WHERE c.name LIKE :search_name OR c.company LIKE :search_company OR c.email LIKE :search_email";
+            $sql .= " WHERE c.name LIKE :search_name OR c.company LIKE :search_company OR c.email LIKE :search_email OR c.phone LIKE :search_phone OR c.whatsapp LIKE :search_whatsapp OR c.wechat LIKE :search_wechat OR c.source_country LIKE :search_country OR c.notes LIKE :search_notes";
             $searchVal = '%' . $search . '%';
             $params[':search_name'] = $searchVal;
             $params[':search_company'] = $searchVal;
             $params[':search_email'] = $searchVal;
+            $params[':search_phone'] = $searchVal;
+            $params[':search_whatsapp'] = $searchVal;
+            $params[':search_wechat'] = $searchVal;
+            $params[':search_country'] = $searchVal;
+            $params[':search_notes'] = $searchVal;
         }
 
         $sql .= " ORDER BY c.created_at DESC LIMIT :limit OFFSET :offset";
@@ -38,11 +43,16 @@ class Customer extends Model
         $params = [];
 
         if ($search !== '') {
-            $sql .= " WHERE c.name LIKE :search_name OR c.company LIKE :search_company OR c.email LIKE :search_email";
+            $sql .= " WHERE c.name LIKE :search_name OR c.company LIKE :search_company OR c.email LIKE :search_email OR c.phone LIKE :search_phone OR c.whatsapp LIKE :search_whatsapp OR c.wechat LIKE :search_wechat OR c.source_country LIKE :search_country OR c.notes LIKE :search_notes";
             $searchVal = '%' . $search . '%';
             $params[':search_name'] = $searchVal;
             $params[':search_company'] = $searchVal;
             $params[':search_email'] = $searchVal;
+            $params[':search_phone'] = $searchVal;
+            $params[':search_whatsapp'] = $searchVal;
+            $params[':search_wechat'] = $searchVal;
+            $params[':search_country'] = $searchVal;
+            $params[':search_notes'] = $searchVal;
         }
 
         $stmt = $this->db()->query($sql);

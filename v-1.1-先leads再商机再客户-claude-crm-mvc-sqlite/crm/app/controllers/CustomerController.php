@@ -70,6 +70,7 @@ class CustomerController extends Controller
             'convertedLead' => $customerModel->convertedLead((int) $id),
             'followUps' => $followUpModel->byCustomer((int) $id),
             'activities' => $customerModel->activities((int) $id),
+            'attachments' => $this->model('Attachment')->byRelated('customer', (int) $id),
             'csrf' => $this->csrfToken(),
         ]);
     }
@@ -200,6 +201,72 @@ class CustomerController extends Controller
         $this->redirect('/customers/' . $id);
     }
 
+    /**
+     * Upload attachment for a customer.
+     */
+    public function uploadAttachment(string $id): void
+    {
+        $this->requireAuth();
+        $this->verifyCsrf();
+
+        $customer = $this->model('Customer')->find((int) $id);
+        if (!$customer) {
+            $this->setFlash('error', '客户不存在。');
+            $this->redirect('/customers');
+            return;
+        }
+
+        if (empty($_FILES['attachment']) || $_FILES['attachment']['error'] === UPLOAD_ERR_NO_FILE) {
+            $this->setFlash('error', '请选择要上传的文件。');
+            $this->redirect('/customers/' . $id);
+            return;
+        }
+
+        $result = $this->model('Attachment')->upload(
+            $_FILES['attachment'],
+            'customer',
+            (int) $id,
+            (int) $_SESSION['user_id']
+        );
+
+        if ($result['success']) {
+            $this->setFlash('success', '附件上传成功。');
+        } else {
+            $this->setFlash('error', $result['error']);
+        }
+
+        $this->redirect('/customers/' . $id);
+    }
+
+    /**
+     * Delete attachment from a customer.
+     */
+    public function deleteAttachment(string $customerId, string $attachmentId): void
+    {
+        $this->requireAuth();
+        $this->verifyCsrf();
+
+        $customer = $this->model('Customer')->find((int) $customerId);
+        if (!$customer) {
+            $this->setFlash('error', '客户不存在。');
+            $this->redirect('/customers');
+            return;
+        }
+
+        $attachmentModel = $this->model('Attachment');
+        $attachment = $attachmentModel->find((int) $attachmentId);
+
+        if (!$attachment || $attachment['related_type'] !== 'customer' || (int) $attachment['related_id'] !== (int) $customerId) {
+            $this->setFlash('error', '附件不存在。');
+            $this->redirect('/customers/' . $customerId);
+            return;
+        }
+
+        $attachmentModel->remove((int) $attachmentId);
+        $this->setFlash('success', '附件已删除。');
+        $this->redirect('/customers/' . $customerId);
+    }
+
     /** @return array{0: array, 1: array} [validated data, errors] */
     private function validate(array $input): array
     {
@@ -209,6 +276,7 @@ class CustomerController extends Controller
             'email'   => trim($input['email'] ?? '') ?: null,
             'phone'   => trim($input['phone'] ?? '') ?: null,
             'whatsapp'      => trim($input['whatsapp'] ?? '') ?: null,
+            'wechat'        => trim($input['wechat'] ?? '') ?: null,
             'facebook'      => trim($input['facebook'] ?? '') ?: null,
             'tiktok'        => trim($input['tiktok'] ?? '') ?: null,
             'website'       => trim($input['website'] ?? '') ?: null,
@@ -218,6 +286,7 @@ class CustomerController extends Controller
             'has_import_capability'     => isset($input['has_import_capability']) ? 1 : 0,
             'conversion_time' => trim($input['conversion_time'] ?? '') ?: null,
             'address' => trim($input['address'] ?? '') ?: null,
+            'shipping_address' => trim($input['shipping_address'] ?? '') ?: null,
             'status'  => in_array($input['status'] ?? '', ['active', 'inactive'], true) ? $input['status'] : 'active',
             'notes'   => trim($input['notes'] ?? '') ?: null,
         ];

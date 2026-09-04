@@ -1,3 +1,9 @@
+<?php
+// Set variables for attachment partial
+$relatedType = 'customer';
+$relatedId = (int) $customer['id'];
+?>
+
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h3 class="mb-0"><?= e($customer['name']) ?></h3>
@@ -21,6 +27,9 @@
             <?php if (!empty($customer['whatsapp'])): ?>
                 <p class="mb-1"><i class="bi bi-whatsapp me-2"></i><?= e($customer['whatsapp']) ?></p>
             <?php endif; ?>
+            <?php if (!empty($customer['wechat'])): ?>
+                <p class="mb-1"><i class="bi bi-wechat me-2"></i><?= e($customer['wechat']) ?></p>
+            <?php endif; ?>
             <?php if (!empty($customer['facebook'])): ?>
                 <p class="mb-1"><i class="bi bi-facebook me-2"></i><a href="<?= e($customer['facebook']) ?>" target="_blank">Facebook</a></p>
             <?php endif; ?>
@@ -31,6 +40,9 @@
                 <p class="mb-1"><i class="bi bi-globe me-2"></i><a href="<?= e($customer['website']) ?>" target="_blank">官方网站</a></p>
             <?php endif; ?>
             <p class="mb-1"><i class="bi bi-geo-alt me-2"></i><?= e($customer['address'] ?: '—') ?></p>
+            <?php if (!empty($customer['shipping_address'])): ?>
+                <p class="mb-1"><i class="bi bi-truck me-2"></i><strong>收货地址：</strong><?= nl2br(e($customer['shipping_address'])) ?></p>
+            <?php endif; ?>
             <?php if (!empty($customer['source_country']) || !empty($customer['source_city'])): ?>
                 <p class="mb-1"><i class="bi bi-map me-2"></i><?= e($customer['source_country'] ?: '') ?><?= $customer['source_city'] ? ' · ' . e($customer['source_city']) : '' ?></p>
             <?php endif; ?>
@@ -172,6 +184,9 @@
     </div>
 
     <div class="col-lg-8">
+        <!-- 附件 -->
+        <?php include APP_PATH . '/views/partials/_attachments.php'; ?>
+
         <!-- 跟进记录 -->
         <div class="card card-table p-3 mb-3">
             <h6 class="text-muted small text-uppercase mb-3">
