@@ -1,3 +1,5 @@
+/* 叁程 CRM (Triphase CRM) — Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved. */
+
 :root {
     --sidebar-w: 230px;
     --brand: #4f46e5;
@@ -151,6 +153,28 @@ body {
     font-size: 1.5rem;
     font-weight: 700;
     margin-bottom: 1.25rem;
+}
+
+/* 应用信息（设置 → 应用信息）驱动的文字 */
+.auth-tagline {
+    text-align: center;
+    color: rgba(255, 255, 255, .75);
+    font-size: .9rem;
+    margin: -.9rem 0 1.1rem;
+}
+
+.auth-company {
+    text-align: center;
+    color: rgba(255, 255, 255, .55);
+    font-size: .8rem;
+    margin: -.7rem 0 1.1rem;
+}
+
+.auth-footer {
+    text-align: center;
+    color: rgba(255, 255, 255, .45);
+    font-size: .75rem;
+    margin-top: 1.1rem;
 }
 
 .auth-card {

@@ -1,3 +1,8 @@
+<?php
+/**
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
+ */
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>

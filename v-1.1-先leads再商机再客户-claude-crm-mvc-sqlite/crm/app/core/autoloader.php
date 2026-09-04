@@ -18,6 +18,8 @@
  * Registered by bootstrap.php (and tests/bootstrap.php). PHP built-ins such as
  * PDO / finfo are untouched because the autoloader only fires for classes PHP
  * has not already loaded.
+ *
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
  */
 spl_autoload_register(function (string $class): void {
     foreach (['core', 'models', 'controllers'] as $dir) {

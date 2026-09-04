@@ -1,4 +1,8 @@
 <?php
+
+/**
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
+ */
 // Set variables for attachment partial
 $relatedType = 'order';
 $relatedId = (int) $order['id'];
@@ -46,7 +50,7 @@ $relatedId = (int) $order['id'];
             <?php if ($order['shipping_address']): ?>
                 <p class="mb-1"><i class="bi bi-geo-alt me-2"></i>收货地址：<?= e($order['shipping_address']) ?></p>
             <?php endif; ?>
-            <p class="mb-1"><i class="bi bi-person-badge me-2"></i>负责人：<?= e($order['owner_name'] ?? '—') ?></p>
+            <?= ownerBlock($order['owner_id'] ?? null) ?>
             <p class="mb-1"><i class="bi bi-clock-history me-2"></i>创建时间：<?= formatDate($order['created_at'], 'Y-m-d H:i') ?></p>
             <?php if (!empty($order['notes'])): ?>
                 <hr>

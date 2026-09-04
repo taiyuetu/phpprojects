@@ -2,6 +2,8 @@
 /**
  * Application configuration.
  * In production, load these from environment variables instead of hardcoding.
+ *
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
  */
 
 // Load local .env values when present. Real environment variables still win.
@@ -34,8 +36,19 @@ if ($dbPath[0] !== '/' && strpos($dbPath, ':') === false) {
 define('DB_PATH', $dbPath);
 
 // ---- Application ----
-define('APP_NAME', 'MiniCRM');
-define('APP_VERSION', '1.2.0');
+// 叁程 / Triphase — 线索、商机、客户，三段行程，一段不落。
+// APP_NAME is only the default for the runtime 系统名称 setting (设置 → 应用信息).
+define('APP_NAME', '叁程 CRM');
+define('APP_NAME_EN', 'Triphase CRM');
+define('APP_TAGLINE', '线索 · 商机 · 客户，一段不落');
+define('APP_AUTHOR', 'wayne');
+define('APP_COPY_YEAR', '2026');
+// Canonical notice used in every source file header ("Copyright (c)" form).
+define('APP_COPYRIGHT', 'Copyright (c) ' . APP_COPY_YEAR . ' ' . APP_AUTHOR . ' · ' . APP_NAME . ' (' . APP_NAME_EN . ')');
+// Short form for the UI (sidebar / login page).
+define('APP_COPYRIGHT_UI', '© ' . APP_COPY_YEAR . ' ' . APP_AUTHOR . ' · ' . APP_NAME . ' (' . APP_NAME_EN . ')');
+define('APP_RIGHTS', '保留所有权利 / All rights reserved.');
+define('APP_VERSION', '1.3.0');
 define('APP_ENV', getenv('APP_ENV') ?: 'development'); // development | production
 define('APP_DEBUG', APP_ENV === 'development');
 
@@ -44,7 +57,7 @@ define('APP_DEBUG', APP_ENV === 'development');
 define('URL_ROOT_OVERRIDE', ''); // leave blank to auto-detect
 
 // Session name
-define('SESSION_NAME', 'minicrm_session');
+define('SESSION_NAME', 'sancheng_crm_session');
 
 // ---- Error reporting ----
 if (APP_DEBUG) {

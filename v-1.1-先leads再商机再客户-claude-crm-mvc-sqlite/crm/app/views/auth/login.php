@@ -1,3 +1,8 @@
+<?php
+/**
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
+ */
+?>
 <h4 class="mb-3 text-center">登录</h4>
 
 <?php if (!empty($errors)): ?>

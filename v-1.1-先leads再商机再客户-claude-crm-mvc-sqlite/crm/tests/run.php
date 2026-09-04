@@ -1,12 +1,14 @@
 <?php
 /**
- * MiniCRM test runner (zero dependencies — plain PHP CLI).
+ * 叁程 CRM (Triphase CRM) test runner (zero dependencies — plain PHP CLI).
  *
  * Usage:
  *   php tests/run.php                  # run all cases
  *   php tests/run.php CustomerTest     # run one case (name filter, no .php)
  *
  * Each case in tests/cases/ runs in its own PHP process with an isolated DB.
+ *
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
  */
 
 error_reporting(E_ALL);

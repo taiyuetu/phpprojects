@@ -1,5 +1,8 @@
 <?php
-/** Model base CRUD tests — the generic Model.php helpers every model inherits. */
+/** Model base CRUD tests — the generic Model.php helpers every model inherits.
+ *
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
+ */
 require __DIR__ . '/../bootstrap.php';
 
 function test_base_crud_on_customers(): void

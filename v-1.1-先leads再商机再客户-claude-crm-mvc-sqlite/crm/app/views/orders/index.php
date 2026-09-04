@@ -1,3 +1,8 @@
+<?php
+/**
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
+ */
+?>
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h3 class="mb-0">订单管理</h3>
     <a href="<?= url('/orders/create') ?>" class="btn btn-primary"><i class="bi bi-plus-lg"></i> 新建订单</a>

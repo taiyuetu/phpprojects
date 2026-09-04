@@ -5,6 +5,8 @@
  *
  * Child models set $table (and optionally $primaryKey) and get
  * simple, ready-to-use CRUD helpers on top of the Database wrapper.
+ *
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
  */
 abstract class Model
 {

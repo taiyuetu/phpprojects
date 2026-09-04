@@ -5,6 +5,8 @@
  *
  * Thin PDO wrapper providing prepared-statement query helpers.
  * Uses a singleton connection so the whole request shares one PDO instance.
+ *
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
  */
 class Database
 {

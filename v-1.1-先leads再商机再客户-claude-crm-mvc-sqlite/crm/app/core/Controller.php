@@ -5,6 +5,8 @@
  *
  * Child controllers extend this to get view rendering, easy model
  * loading, redirects, flash messages and a simple auth guard.
+ *
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
  */
 abstract class Controller
 {
@@ -91,7 +93,10 @@ abstract class Controller
     protected function requireRole(string $role, string $fallbackUrl = '/'): void
     {
         $this->requireAuth();
-        if (($_SESSION['user']['role'] ?? '') !== $role) {
+        // Resolve through currentUser() so a role change in the users table is
+        // honoured immediately instead of via the login-time session snapshot.
+        $user = currentUser();
+        if (($user['role'] ?? '') !== $role) {
             $this->setFlash('error', '您没有执行该操作的权限。');
             $this->redirect($fallbackUrl);
         }

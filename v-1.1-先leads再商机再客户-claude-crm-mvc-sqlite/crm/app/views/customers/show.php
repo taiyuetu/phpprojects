@@ -1,4 +1,8 @@
 <?php
+
+/**
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
+ */
 // Set variables for attachment partial
 $relatedType = 'customer';
 $relatedId = (int) $customer['id'];
@@ -46,7 +50,7 @@ $relatedId = (int) $customer['id'];
             <?php if (!empty($customer['source_country']) || !empty($customer['source_city'])): ?>
                 <p class="mb-1"><i class="bi bi-map me-2"></i><?= e($customer['source_country'] ?: '') ?><?= $customer['source_city'] ? ' · ' . e($customer['source_city']) : '' ?></p>
             <?php endif; ?>
-            <p class="mb-1"><i class="bi bi-person-badge me-2"></i>负责人：<?= e($customer['owner_name'] ?? '—') ?></p>
+            <?= ownerBlock($customer['owner_id'] ?? null) ?>
             <p class="mb-1"><?= statusBadge($customer['status']) ?></p>
             <p class="mb-1"><i class="bi bi-clock-history me-2"></i>
                 <?php if (!empty($customer['conversion_time'])): ?>

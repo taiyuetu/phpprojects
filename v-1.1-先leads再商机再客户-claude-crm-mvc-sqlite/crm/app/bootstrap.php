@@ -3,6 +3,8 @@
 /**
  * Application bootstrap.
  * Required once by public/index.php (the single front controller).
+ *
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
  */
 
 define('APP_PATH', __DIR__);

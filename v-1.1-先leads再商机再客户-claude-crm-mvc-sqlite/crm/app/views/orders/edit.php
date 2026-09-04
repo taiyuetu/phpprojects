@@ -1,4 +1,8 @@
 <?php
+
+/**
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
+ */
 // Set variables for attachment partial
 $relatedType = 'order';
 $relatedId = (int) $order['id'];

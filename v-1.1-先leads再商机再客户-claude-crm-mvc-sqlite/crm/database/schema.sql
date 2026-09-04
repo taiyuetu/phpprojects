@@ -1,5 +1,8 @@
+-- 叁程 CRM (Triphase CRM)
+-- Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
+
 -- ===============================================================
--- MiniCRM Complete Database Schema (SQLite)
+-- 叁程 CRM (Triphase CRM) — Complete Database Schema (SQLite)
 -- ===============================================================
 -- THIS FILE IS THE CANONICAL / SINGLE SOURCE OF TRUTH for the database.
 -- It is fully idempotent: every statement uses IF NOT EXISTS / OR IGNORE,
@@ -20,13 +23,37 @@ PRAGMA journal_mode = WAL;
 -- ---------------------------------------------------------------
 -- 1. Users (CRM staff who log in)
 -- ---------------------------------------------------------------
+-- These rows are the SINGLE SOURCE OF TRUTH for "who a person is":
+-- every other table references users by id only (owner_id / user_id /
+-- uploaded_by), so editing a profile here is what the whole app shows --
+-- customers' 负责人, leads' 负责人, deals, orders, follow-ups, attachments.
 CREATE TABLE IF NOT EXISTS users (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     name       TEXT NOT NULL,
     email      TEXT NOT NULL UNIQUE,
     password   TEXT NOT NULL,
     role       TEXT NOT NULL DEFAULT 'sales' CHECK (role IN ('admin','sales')),
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    phone      TEXT,
+    whatsapp   TEXT,
+    job_title  TEXT,
+    notes      TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    -- nullable on purpose: SQLite forbids ALTER TABLE ADD COLUMN with a
+    -- non-constant default, and legacy databases must upgrade cleanly.
+    updated_at TEXT
+);
+
+-- ---------------------------------------------------------------
+-- 1b. App settings (key/value; edited from the 设置 page by admins)
+-- ---------------------------------------------------------------
+-- Read through Setting::get() / appSetting(), which cache one query per
+-- request and fall back to Setting::defaults() when a row is missing.
+CREATE TABLE IF NOT EXISTS app_settings (
+    name       TEXT PRIMARY KEY,
+    value      TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_by INTEGER,
+    FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
 -- ---------------------------------------------------------------
@@ -281,6 +308,16 @@ END;
 -- 1. Default admin login: admin@example.com / password
 INSERT OR IGNORE INTO users (id, name, email, password, role) VALUES
 (1, 'Admin User', 'admin@example.com', '$2y$10$bStQzLf6y2u8oGLFPaP5oeX5IR.5IVsE8.yhYMxCpyKJVDMjCjvNO', 'admin');
+
+-- 1b. App settings defaults (only inserted once; later edits are kept,
+--     because INSERT OR IGNORE never overwrites an existing row).
+--     Anything missing here falls back to Setting::defaults() at read time.
+INSERT OR IGNORE INTO app_settings (name, value) VALUES
+('app_name',        '叁程 CRM'),
+('app_tagline',     '线索 · 商机 · 客户，一段不落'),
+('company_name',    ''),
+('copyright_notice','© 2026 wayne · 叁程 CRM (Triphase CRM)'),
+('currency_symbol', '$');
 
 -- 2. Sample customers
 INSERT OR IGNORE INTO customers (id, name, company, email, phone, whatsapp, source_country, source_city, first_purchase_from_china, has_import_capability, status, owner_id) VALUES

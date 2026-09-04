@@ -1,3 +1,8 @@
+<?php
+/**
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
+ */
+?>
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h3 class="mb-0">线索</h3>
     <a href="<?= url('/leads/create') ?>" class="btn btn-primary"><i class="bi bi-plus-lg"></i> 新建线索</a>
@@ -20,13 +25,15 @@
                     <th>来源</th>
                     <th>预估金额</th>
                     <th>状态</th>
+                    <?php if ($status === 'lost'): ?>
                     <th>流失原因</th>
+                    <?php endif; ?>
                     <th class="text-end">操作</th>
                 </tr>
             </thead>
             <tbody>
             <?php if (!$leads): ?>
-                <tr><td colspan="7" class="text-center text-muted p-4">未找到线索。</td></tr>
+                <tr><td colspan="<?= $status === 'lost' ? 7 : 6 ?>" class="text-center text-muted p-4">未找到线索。</td></tr>
             <?php endif; ?>
             <?php foreach ($leads as $l): ?>
                 <tr class="<?= $l['status'] === 'lost' ? 'table-light' : '' ?>">
@@ -35,8 +42,9 @@
                     <td><?= e($l['source'] ?: '—') ?></td>
                     <td><?= money($l['value']) ?></td>
                     <td><?= statusBadge($l['status']) ?></td>
+                    <?php if ($status === 'lost'): ?>
                     <td>
-                        <?php if ($l['status'] === 'lost' && $l['lost_reason']): ?>
+                        <?php if ($l['lost_reason']): ?>
                             <span class="badge bg-danger-subtle text-danger">
                                 <?= e(Lead::lostReasonLabel($l['lost_reason'])) ?>
                             </span>
@@ -44,6 +52,7 @@
                             —
                         <?php endif; ?>
                     </td>
+                    <?php endif; ?>
                     <td class="text-end">
                         <?php if ($l['status'] === 'lost'): ?>
                             <!-- 流失线索：显示重新激活按钮 -->

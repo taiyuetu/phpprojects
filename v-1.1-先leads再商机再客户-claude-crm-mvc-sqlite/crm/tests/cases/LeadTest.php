@@ -1,5 +1,8 @@
 <?php
-/** Lead model tests — status transitions, lost/reactivate lifecycle, listing. */
+/** Lead model tests — status transitions, lost/reactivate lifecycle, listing.
+ *
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
+ */
 require __DIR__ . '/../bootstrap.php';
 
 function seedLead(array $overrides = []): array

@@ -1,4 +1,8 @@
-# MiniCRM — PHP MVC CRM Application
+<!-- Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved. -->
+
+# 叁程 CRM (Triphase CRM) — PHP MVC CRM Application
+
+**叁程 / Triphase** —— 线索、商机、客户，三段行程，一段不落。
 
 A lightweight, dependency-free CRM built on a small custom PHP MVC framework.
 No Composer packages required — just PHP and SQLite. Designed to be easy to
@@ -9,11 +13,18 @@ directly to the MVC pattern.
 
 - **Auth** — register / login / logout, bcrypt password hashing, CSRF-protected forms, session-based auth guard
 - **Customers** — full CRUD, search, activity/notes timeline, related leads & deals
-- **Leads** — full CRUD, status filter (new / contacted / qualified / lost), one-click "convert to deal"
+- **Leads** — full CRUD, status filter (new / contacted / qualified / lost), one-click "convert to deal";
+  the 流失原因 (lost-reason) column is shown only on the **lost** tab, keeping the other tabs lean
 - **Deals** — kanban-style pipeline board grouped by stage, won deals auto-create an order and stay on the board
 - **Orders** — created automatically when a deal is won (or manually), with line-item management and statuses
 - **Attachments** — upload files (images / PDF / Excel / zip) on deals & orders; copied when a deal wins
 - **Archiving** — lost (丢单) deals are auto-archived off the board; archived deals can be restored to 进行中
+- **Settings** (`/settings`) — admins edit application info (system name, tagline, company, copyright notice, currency symbol)
+  stored in `app_settings` and read through `appSetting()`/`money()`, so changes apply site-wide at once;
+  everyone edits their own profile (name, email, 职位, phone, WhatsApp, notes) and password
+- **People are referenced by id only** — customers/leads/deals/orders store `owner_id`, follow-ups and
+  activities `user_id`, attachments `uploaded_by`; the name is JOINed back on read, so a profile edit in
+  Settings is instantly reflected everywhere that person appears as 负责人 (no denormalised copies)
 - **Dashboard** — key stats (customers, open leads, pipeline value) and recent activity
 - Clean Bootstrap 5 UI, responsive sidebar layout
 
@@ -112,8 +123,13 @@ php tests/cases/OrderTest.php      # run a single case directly
 
 The suite covers the model layer (CRUD, status transitions, archive lifecycle,
 item sync), the autoloader regression (views calling model static helpers with no
-controller pre-loading), attachment copy-on-convert, and an HTTP smoke test that
+controller pre-loading), attachment copy-on-convert, the migration tooling (fresh
+build, idempotent re-run, legacy database upgrade) and an HTTP smoke test that
 logs in through the real Router → Controller → View stack.
+
+The HTTP-level cases speak over plain PHP streams (`TestHttp` in
+`tests/bootstrap.php`), so the `curl` extension is **not** required — the only
+requirement is `allow_url_fopen`, which is on by default.
 
 ## Architecture notes
 
@@ -123,6 +139,10 @@ logs in through the real Router → Controller → View stack.
   controllers never need to "pre-load" classes before rendering.
 - **Views are dumb** — they never instantiate models or query the DB; controllers
   pass every array they need (including attachments).
+- **One row per person** — `users` is the only place a person's name/contact details live.
+  Anything that needs "who" stores `users.id` and resolves the rest at read time (JOINs in the
+  models, plus `ownerLabel()` / `ownerBlock()` for detail pages). `SettingTest` asserts no business
+  table grows an `owner_name`-style column, which is what would silently break Settings → 负责人 sync.
 
 ## Extending the database
 
@@ -131,6 +151,10 @@ logs in through the real Router → Controller → View stack.
 - **Structural change to an existing table** (e.g. `ALTER TABLE … ADD COLUMN`) → create a new
   numbered file `database/migrations/NNN_name.sql`; the runner applies it exactly once and records
   it in the `_migrations` table. See `database/migrations/README.md`.
+  Keep `schema.sql` in sync as well (fresh DBs get the column from the baseline); when a migration
+  contains *only* `ADD COLUMN` statements and every column already exists, the runner prints
+  `skipped: NNN_name.sql` and just records it — no `duplicate column name` failure on a fresh
+  database, while legacy databases (column missing) are still upgraded for real.
 
 ## Extending the app
 
@@ -150,3 +174,13 @@ No other file needs to change — routing, DB access, and layout wrapping all co
 - All SQL goes through PDO prepared statements.
 - Change `APP_ENV` to `production` in `config.php` before deploying (disables verbose error output).
 - Rotate the demo admin password (or delete the seed user) before using this beyond local development.
+
+## 版权 / Copyright
+
+Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
+
+- Every source file (PHP / SQL / CSS / Markdown / `.htaccess` / `.env.example`) carries this notice in its
+  header, so the attribution survives being copied out of the repository.
+- The line shown in the UI — sidebar footer, login page footer, `<meta name="copyright">` — comes from the
+  `版权信息` entry under 设置 → 应用信息, so a deployment can show its own legal entity without a code change.
+- Third-party assets stay under their own licenses: Bootstrap 5 (MIT), Bootstrap Icons (MIT).

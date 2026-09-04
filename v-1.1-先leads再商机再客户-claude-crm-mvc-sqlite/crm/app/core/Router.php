@@ -8,6 +8,8 @@
  * call ->dispatch() once from the front controller.
  *
  * Supports {param} placeholders, e.g. '/customers/{id}/edit'.
+ *
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
  */
 class Router
 {

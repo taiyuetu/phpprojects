@@ -1,5 +1,8 @@
 <?php
-/** Deal model tests — pipeline queries, archive lifecycle, order lookups. */
+/** Deal model tests — pipeline queries, archive lifecycle, order lookups.
+ *
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
+ */
 require __DIR__ . '/../bootstrap.php';
 
 function seedCustomer(string $name): array

@@ -9,6 +9,8 @@
  *
  * Here we render REAL view partials with NO controller involvement. The
  * autoloader must resolve every model class on first static reference.
+ *
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
  */
 require __DIR__ . '/../bootstrap.php';
 

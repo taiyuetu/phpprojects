@@ -1,5 +1,8 @@
 <?php
-/** Order / OrderItem model tests — numbering, item sync, amount rollups. */
+/** Order / OrderItem model tests — numbering, item sync, amount rollups.
+ *
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
+ */
 require __DIR__ . '/../bootstrap.php';
 
 function seedOrderCustomer(): array

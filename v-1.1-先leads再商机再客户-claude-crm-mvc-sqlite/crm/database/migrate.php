@@ -1,6 +1,6 @@
 <?php
 /**
- * MiniCRM 统一数据库迁移入口 (single source of truth for DB setup)
+ * 叁程 CRM (Triphase CRM) 统一数据库迁移入口 (single source of truth for DB setup)
  *
  * 用法 (运行一次即可，可重复执行，幂等)：
  *   php database/migrate.php             # 创建/升级数据库
@@ -16,11 +16,15 @@
  *      对现有表做无法幂等表达的变更 (如 ALTER TABLE ... ADD COLUMN) 时，
  *      在 database/migrations/ 目录新增一个 NNN_名称.sql 文件。
  *      本脚本按文件名顺序执行一次并记录到 _migrations 表，之后不会再重复执行。
+ *      若某个增量文件通篇只有 ADD COLUMN 语句，而其中的列在基线里已经存在
+ *      （全新数据库就是这种情况），则自动跳过执行、仅登记，避免 duplicate column name。
  *
  * 约定：
  *   - 新增"整张新表/索引/触发器"→ 直接写进 schema.sql 即可（不需要增量文件）。
- *   - 修改"已有表的结构"(加列等) → 新建增量文件，并(可选)同步更新 schema.sql，
- *     这样全新数据库与旧数据库最终结构一致。
+ *   - 修改"已有表的结构"(加列等) → 新建增量文件，并同步更新 schema.sql，
+ *     这样全新数据库与旧数据库最终结构一致（增量文件会因基线已含该列而自动跳过）。
+ *
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
  */
 
 // ---------- 参数解析 ----------
@@ -33,7 +37,7 @@ if ($dbPath !== null) {
 
 if (isset($opts['help'])) {
     echo <<<TXT
-MiniCRM database migrate tool
+Triphase CRM database migrate tool
 
 Usage:
   php database/migrate.php                 create or upgrade the database
@@ -94,6 +98,43 @@ try {
 } catch (PDOException $e) {
     fwrite(STDERR, 'Cannot open database: ' . $e->getMessage() . PHP_EOL);
     exit(1);
+}
+
+/** 标识符是否已是数据库中真实存在的列（表不存在时返回 false） */
+function columnExists(PDO $pdo, string $table, string $column): bool
+{
+    // pragma_table_info 的表名可以参数化，无需拼接标识符
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM pragma_table_info(:t) WHERE lower(name) = lower(:c)');
+    $stmt->execute([':t' => $table, ':c' => $column]);
+    return (int) $stmt->fetchColumn() > 0;
+}
+
+/**
+ * 解析"纯加列"增量文件。
+ *
+ * 返回 [[表名, 列名], ...]；若文件除注释/空白/分号外还含其它语句，返回 []，
+ * 表示不做跳过判定，交由正常执行流程处理。
+ *
+ * @return array<int, array{0:string,1:string}>
+ */
+function addedColumnsOfPureAddColumnFile(string $sql): array
+{
+    // SQLite 的 ADD COLUMN 子句内不会出现分号，用 [^;]* 截到语句末尾即可
+    $re = '/ALTER\s+TABLE\s+[`"\[]?([A-Za-z_][A-Za-z0-9_$]*)[`"\]]?\s+ADD\s+(?:COLUMN\s+)?[`"\[]?([A-Za-z_][A-Za-z0-9_$]*)[`"\]]?[^;]*/i';
+    if (!preg_match_all($re, $sql, $m, PREG_SET_ORDER)) {
+        return [];
+    }
+    $rest = preg_replace('/--[^\r\n]*/', ' ', $sql); // 去行注释
+    $rest = preg_replace($re, ' ', $rest);           // 移除加列语句本身
+    $rest = trim(preg_replace('/\s+/', ' ', str_replace(';', ' ', (string) $rest)));
+    if ($rest !== '') {
+        return []; // 含其它变更（建表、改 CHECK 等）——不可跳过
+    }
+    $cols = [];
+    foreach ($m as $row) {
+        $cols[] = [$row[1], $row[2]];
+    }
+    return $cols;
 }
 
 /** 整文件执行；尝试包事务；返回抛错前已执行部分的风险由"执行成功才记录"兜底 */
@@ -180,22 +221,40 @@ $applied = $getApplied();
 $files = glob($migDir . '/*.sql') ?: [];
 sort($files);
 $ran = 0;
+$skipped = 0;
 foreach ($files as $file) {
     $name = basename($file);
     if (in_array($name, $applied, true)) {
         continue; // 已执行过
     }
+    // 基线 schema.sql 是结构的唯一权威来源，且每次运行都会自愈式重放；
+    // 因此"只加列"的增量文件在基线已含该列的数据库上是多余的，跳过即可。
+    $added = addedColumnsOfPureAddColumnFile((string) file_get_contents($file));
+    if ($added) {
+        $missing = [];
+        foreach ($added as [$table, $column]) {
+            if (!columnExists($pdo, $table, $column)) {
+                $missing[] = $table . '.' . $column;
+            }
+        }
+        if (!$missing) {
+            echo '  skipped: ' . $name . ' (column(s) already present in baseline)' . PHP_EOL;
+            $markApplied($name); // 效果已具备，登记以免每次重判
+            $skipped++;
+            continue;
+        }
+    }
     execFile($pdo, $file, $name);
     $markApplied($name);
     $ran++;
 }
-if ($ran === 0) {
+if ($ran === 0 && $skipped === 0) {
     echo '  nothing pending (migrations/ has no unapplied files)' . PHP_EOL;
 }
 
 // ---------- 3) 自检：期望表是否齐全 ----------
 echo '== Verify ==' . PHP_EOL;
-$expected = ['users', 'customers', 'leads', 'deals', 'orders', 'order_items', 'follow_ups', 'activities', 'attachments'];
+$expected = ['users', 'app_settings', 'customers', 'leads', 'deals', 'orders', 'order_items', 'follow_ups', 'activities', 'attachments'];
 $actual = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name <> '_migrations'")->fetchAll();
 $actualNames = array_column($actual, 'name');
 $missing = array_diff($expected, $actualNames);

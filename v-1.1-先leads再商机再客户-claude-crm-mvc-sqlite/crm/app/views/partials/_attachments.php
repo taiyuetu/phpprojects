@@ -3,6 +3,8 @@
  * Attachment upload and list component.
  * Required variables: $relatedType ('deal'|'order'), $relatedId (int), $csrf (string)
  * Required: $attachments (array, loaded by the controller — views never query the DB)
+ *
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
  */
 $attachments = $attachments ?? [];
 ?>

@@ -1,3 +1,8 @@
+<?php
+/**
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
+ */
+?>
 <!-- Pagination partial — expects $page, $totalPages, and a $baseUrl variable -->
 <?php if ($totalPages > 1): ?>
 <nav class="d-flex justify-content-between align-items-center mt-3 px-1">

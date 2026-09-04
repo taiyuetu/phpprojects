@@ -1,3 +1,6 @@
+-- 叁程 CRM (Triphase CRM)
+-- Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
+
 -- Update attachments table to allow 'customer' as related_type
 -- SQLite doesn't support ALTER CHECK constraints, so we recreate the table.
 

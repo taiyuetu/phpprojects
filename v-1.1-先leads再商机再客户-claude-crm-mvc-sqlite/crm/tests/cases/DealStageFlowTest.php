@@ -8,55 +8,35 @@
  *   2. stage -> closed_lost (丢单): the deal IS archived and leaves the board.
  *
  * Verifies both the HTTP response path and the resulting DB state.
+ *
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
  */
 require __DIR__ . '/../bootstrap.php';
 
-function startServerAndLogin(string $base, string $cookieFile): string
+function startServerAndLogin(TestHttp $http, string $base): string
 {
     // Returns the CSRF token from the logged-in session.
-    $ch = curl_init($base . '/login');
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_COOKIEJAR, $cookieFile);
-    $loginPage = curl_exec($ch);
-    curl_close($ch);
-    preg_match('/name="csrf_token" value="([^"]+)"/', (string) $loginPage, $m);
+    $loginPage = $http->get($base . '/login')['body'];
+    preg_match('/name="csrf_token" value="([^"]+)"/', $loginPage, $m);
     assertTrue(!empty($m[1]), 'csrf token found on login page');
 
-    $ch = curl_init($base . '/login');
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
+    $http->post($base . '/login', [
         'csrf_token' => $m[1],
         'email'      => 'admin@example.com',
         'password'   => 'password',
-    ]));
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-    curl_setopt($ch, CURLOPT_COOKIEFILE, $cookieFile);
-    curl_setopt($ch, CURLOPT_COOKIEJAR, $cookieFile);
-    curl_exec($ch);
-    curl_close($ch);
+    ]);
     return $m[1];
 }
 
 /** Update /deals/{id} via the form method-override pattern; returns final HTTP code. */
-function putDeal(string $base, string $cookieFile, string $csrf, int $dealId, array $fields): int
+function putDeal(TestHttp $http, string $base, string $csrf, int $dealId, array $fields): int
 {
     // Real HTML forms POST with a hidden _method=PUT field — replicate that,
     // because PHP only populates $_POST for POST requests (not raw PUT bodies).
-    $ch = curl_init($base . '/deals/' . $dealId);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query(array_merge(
+    return $http->post($base . '/deals/' . $dealId, array_merge(
         ['_method' => 'PUT', 'csrf_token' => $csrf],
         $fields
-    )));
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-    curl_setopt($ch, CURLOPT_COOKIEFILE, $cookieFile);
-    curl_setopt($ch, CURLOPT_COOKIEJAR, $cookieFile);
-    curl_exec($ch);
-    $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    return $code;
+    ))['code'];
 }
 
 function dbDeal(int $id): array
@@ -99,14 +79,10 @@ function test_won_creates_order_but_does_not_archive(): void
         assertTrue(is_resource($proc), 'built-in server started');
 
         $base = "http://127.0.0.1:{$port}";
+        $http = new TestHttp();
         $up = false;
         for ($i = 0; $i < 30; $i++) {
-            $ch = curl_init($base . '/login');
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 1);
-            $body = curl_exec($ch);
-            curl_close($ch);
-            if ($body !== false) {
+            if ($http->reachable($base . '/login')) {
                 $up = true;
                 break;
             }
@@ -114,11 +90,10 @@ function test_won_creates_order_but_does_not_archive(): void
         }
         assertTrue($up, 'server reachable');
 
-        $cookieFile = sys_get_temp_dir() . '/crm_flow_cookies.txt';
-        $csrf = startServerAndLogin($base, $cookieFile);
+        $csrf = startServerAndLogin($http, $base);
 
         // Act: mark the deal as won (closed_won) with one item line.
-        $code = putDeal($base, $cookieFile, $csrf, 1, [
+        $code = putDeal($http, $base, $csrf, 1, [
             'title'       => 'Flow Deal',
             'customer_id' => 1,
             'value'       => 5000,
@@ -139,8 +114,6 @@ function test_won_creates_order_but_does_not_archive(): void
         assertEquals(1, count($orders), 'one order auto-created from the won deal');
         assertEquals(200.0, (float) $orders[0]['amount'], 'order amount = item subtotal');
         assertEquals(1, count((new OrderItem())->byOrder((int) $orders[0]['id'])), 'order item saved');
-
-        @unlink($cookieFile);
     } finally {
         $restoreEnv();
         if (is_resource($proc)) {
@@ -189,14 +162,10 @@ function test_lost_archives_the_deal(): void
         assertTrue(is_resource($proc), 'built-in server started');
 
         $base = "http://127.0.0.1:{$port}";
+        $http = new TestHttp();
         $up = false;
         for ($i = 0; $i < 30; $i++) {
-            $ch = curl_init($base . '/login');
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 1);
-            $body = curl_exec($ch);
-            curl_close($ch);
-            if ($body !== false) {
+            if ($http->reachable($base . '/login')) {
                 $up = true;
                 break;
             }
@@ -204,11 +173,10 @@ function test_lost_archives_the_deal(): void
         }
         assertTrue($up, 'server reachable');
 
-        $cookieFile = sys_get_temp_dir() . '/crm_flow2_cookies.txt';
-        $csrf = startServerAndLogin($base, $cookieFile);
+        $csrf = startServerAndLogin($http, $base);
 
         // Act: mark the deal as lost (closed_lost).
-        $code = putDeal($base, $cookieFile, $csrf, 2, [
+        $code = putDeal($http, $base, $csrf, 2, [
             'title'       => 'Lost Deal',
             'customer_id' => 2,
             'value'       => 3000,
@@ -225,8 +193,6 @@ function test_lost_archives_the_deal(): void
 
         // No order should be created for a lost deal.
         assertEquals(0, count((new Order())->byDeal(2)), 'no order for a lost deal');
-
-        @unlink($cookieFile);
     } finally {
         $restoreEnv();
         if (is_resource($proc)) {

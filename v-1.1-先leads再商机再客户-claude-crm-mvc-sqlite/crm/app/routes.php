@@ -1,6 +1,9 @@
 <?php
 
-/** @var Router $router */
+/** @var Router $router
+ *
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
+ */
 
 // ---- Auth ----
 $router->get('/login', 'AuthController@showLogin');
@@ -38,6 +41,13 @@ $router->post('/leads/{id}/reactivate', 'LeadController@reactivate');
 
 // ---- Help ----
 $router->get('/help', 'HelpController@index');
+
+// ---- Settings (应用信息 + 个人信息) ----
+$router->get('/settings', 'SettingController@index');
+$router->post('/settings/app', 'SettingController@updateApp');
+$router->post('/settings/app/reset', 'SettingController@resetApp');
+$router->post('/settings/profile', 'SettingController@updateProfile');
+$router->post('/settings/password', 'SettingController@updatePassword');
 
 // ---- Deals ----
 $router->get('/deals', 'DealController@index');

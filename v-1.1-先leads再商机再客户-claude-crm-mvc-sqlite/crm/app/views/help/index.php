@@ -1,3 +1,8 @@
+<?php
+/**
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
+ */
+?>
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h3 class="mb-0">使用说明</h3>
 </div>
@@ -5,7 +10,7 @@
 <!-- 项目概述 -->
 <div class="card card-table p-4 mb-4">
     <h5 class="mb-3"><i class="bi bi-info-circle me-2"></i>项目概述</h5>
-    <p>本系统是一个轻量级客户关系管理（CRM）系统，帮助销售团队管理客户信息、跟踪销售线索、推进商机成交、管理订单。系统采用 MVC 架构，使用 PHP + SQLite 构建。</p>
+    <p><strong><?= e(appName()) ?></strong> 是一个轻量级客户关系管理（CRM）系统，帮助销售团队管理客户信息、跟踪销售线索、推进商机成交、管理订单；名称取“线索 → 商机 → 客户”三段行程之意。系统采用 MVC 架构，使用 PHP + SQLite 构建。</p>
     <div class="row g-3 mt-2">
         <div class="col-md-3 col-6">
             <div class="border rounded p-3 text-center h-100">
@@ -260,6 +265,9 @@
 
     <h6 class="text-muted">线索列表</h6>
     <p>显示所有线索，顶部有状态筛选按钮（全部 / 新建 / 已联系 / 已确认 / 已流失）。</p>
+    <p class="mb-0">列表默认列为：线索 / 联系人 / 来源 / 预估金额 / 状态 / 操作。
+        <span class="badge text-bg-danger">流失原因</span> 仅在筛选为<strong>“已流失”</strong>时
+        才作为额外一列展示（其余标签页下该列隐藏，避免整列“—”）。</p>
 
     <h6 class="text-muted">线索状态说明</h6>
     <table class="table table-sm mb-3">
@@ -316,6 +324,7 @@
 
     <h6 class="text-muted">重新激活</h6>
     <p class="mb-0">已流失的线索可以重新激活，点击操作栏的激活按钮 <i class="bi bi-arrow-counterclockwise text-success"></i>，线索将恢复为"已联系"状态，可继续跟进或转商机。</p>
+    <p class="small text-muted">线索的流失原因在“已流失”标签页的<strong>流失原因</strong>列查阅；重新激活会清空该原因与流失时间。</p>
 </div>
 
 <!-- 商机管理 -->
@@ -391,6 +400,45 @@
     <p class="mb-0">每条跟进记录可以包含：标题、描述、下一步行动、下次跟进日期。</p>
 </div>
 
+<!-- 设置 -->
+<div class="card card-table p-4 mb-4">
+    <h5 class="mb-3"><i class="bi bi-gear-fill me-2"></i>设置</h5>
+    <p>入口：左侧菜单<strong>设置</strong>，或右上角账户下拉菜单（个人信息 / 修改密码 / 应用信息）。</p>
+
+    <div class="table-responsive">
+        <table class="table table-sm mb-3">
+            <thead><tr><th>选项卡</th><th>谁可改</th><th>内容</th><th>生效范围</th></tr></thead>
+            <tbody>
+                <tr>
+                    <td><strong>个人信息</strong></td>
+                    <td>本人</td>
+                    <td>姓名、邮箱（登录账号）、职位、电话、WhatsApp、备注</td>
+                    <td>全局：客户 / 线索 / 商机 / 订单的<strong>负责人</strong>、跟进与动态的记录人、附件上传人、顶栏用户名</td>
+                </tr>
+                <tr>
+                    <td><strong>修改密码</strong></td>
+                    <td>本人</td>
+                    <td>当前密码 + 新密码（至少 6 位，需两次一致）</td>
+                    <td>下次登录</td>
+                </tr>
+                <tr>
+                    <td><strong>应用信息</strong></td>
+                    <td><span class="badge text-bg-danger">仅管理员</span></td>
+                    <td>系统名称、系统副标题、公司名称、版权信息、货币符号</td>
+                    <td>全站：侧边栏、浏览器标题、登录页、所有金额显示</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h6 class="text-muted">为什么改个名字，客户上的负责人也跟着变了？</h6>
+    <p>这是有意设计的：<strong>人的信息只存一份</strong>。客户、线索、商机、订单只记录“这是哪个用户”
+        （<code>owner_id</code>），姓名与联系方式在读取时从账号表取，因此不存在“改了账号、但客户还显示旧名字”的不一致，
+        也不需额外的同步按钮。</p>
+    <p class="mb-0">“个人信息”页右侧的<strong>信息同步范围</strong>会实时列出你的账号当前被多少条记录引用，
+        保存后这些位置会直接显示新内容。</p>
+</div>
+
 <!-- 数据库迁移 -->
 <div class="card card-table p-4 mb-4">
     <h5 class="mb-3"><i class="bi bi-database me-2"></i>数据库说明</h5>
@@ -399,6 +447,9 @@
     <h6 class="text-muted">创建 / 升级 / 修复数据库（推荐）</h6>
     <p>在项目根目录执行统一迁移入口，幂等、可重复运行，会自动补齐缺失的表与种子数据：</p>
     <pre class="bg-light p-3 rounded small mb-0"><code>php database/migrate.php</code></pre>
+    <p class="mt-3 mb-0 text-muted small">增量迁移（<code>database/migrations/NNN_*.sql</code>）若为“纯加列”且基线
+        <code>schema.sql</code> 已含该列，脚本会输出 <code>skipped: …</code> 并直接登记，
+        不会报 duplicate column name；旧数据库缺列时仍会正常执行。</p>
 </div>
 
 <!-- 常见问题 -->
@@ -512,6 +563,21 @@
                     登录页底部有提示：<br>
                     邮箱：<code>admin@example.com</code><br>
                     密码：<code>password</code>
+                </div>
+            </div>
+        </div>
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq8">
+                    同事改名/换手机号了，需要逐个改客户的负责人吗？
+                </button>
+            </h2>
+            <div id="faq8" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                <div class="accordion-body">
+                    不需要。让他自己在<strong>设置 → 个人信息</strong>里修改，保存后客户 / 线索 / 商机 / 订单的
+                    负责人、跟进记录的操作人都会<strong>立即显示新信息</strong>，
+                    因为业务记录只存用户 ID，姓名是读数据时从 <code>users</code> 表实时取回的。<br>
+                    注意区分：如果是“换一个人负责”，要去客户 / 订单页把负责人改成另一个账号，而不是改个人信息。
                 </div>
             </div>
         </div>

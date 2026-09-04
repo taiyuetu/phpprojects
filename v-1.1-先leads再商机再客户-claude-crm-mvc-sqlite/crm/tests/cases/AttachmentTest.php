@@ -1,5 +1,8 @@
 <?php
-/** Attachment tests — byRelated join, copyTo (deal->order), remove, helpers. */
+/** Attachment tests — byRelated join, copyTo (deal->order), remove, helpers.
+ *
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
+ */
 require __DIR__ . '/../bootstrap.php';
 
 function seedAttachmentData(): array

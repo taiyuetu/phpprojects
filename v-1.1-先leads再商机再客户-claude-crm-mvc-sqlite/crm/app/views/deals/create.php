@@ -1,3 +1,8 @@
+<?php
+/**
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
+ */
+?>
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h3 class="mb-0">新建商机</h3>
     <a href="<?= url('/deals') ?>" class="btn btn-outline-secondary btn-sm">返回看板</a>
