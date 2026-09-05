@@ -19,7 +19,7 @@ $emptyIndex = count($rows);
 ?>
 <div id="items-container">
     <?php foreach ($rows as $i => $item): ?>
-        <?php include APP_PATH . '/views/partials/_item_row.php'; ?>
+        <?php $rowIndex = $i; include APP_PATH . '/views/partials/_item_row.php'; ?>
     <?php endforeach; ?>
     <?php if ($rows === []): ?>
         <?php

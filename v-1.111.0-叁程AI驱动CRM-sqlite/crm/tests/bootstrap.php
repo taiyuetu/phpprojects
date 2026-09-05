@@ -106,6 +106,9 @@ final class TestHttp
     /** @var array<string,string> session cookie jar (name => value) */
     private array $cookies = [];
 
+    /** @var array<string,array<int,string>> last response headers (for Set-Cookie assertions) */
+    public array $lastHeaders = [];
+
     /** @return array{code:int, body:string, url:string} */
     public function get(string $url): array
     {
@@ -134,6 +137,7 @@ final class TestHttp
                 return $result;                       // connection refused / timeout
             }
             [$code, $headers, $body] = $raw;
+            $this->lastHeaders = $headers;
             $this->absorbCookies($headers['set-cookie'] ?? []);
             $result = ['code' => $code, 'body' => $body, 'url' => $url];
 

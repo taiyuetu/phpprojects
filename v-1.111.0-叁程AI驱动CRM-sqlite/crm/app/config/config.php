@@ -52,6 +52,15 @@ define('APP_VERSION', '1.11.0');
 define('APP_ENV', getenv('APP_ENV') ?: 'development'); // development | production
 define('APP_DEBUG', APP_ENV === 'development');
 
+// ---- Self-registration gate ----
+// 团队工具默认不向陌生人开放：production 环境默认关闭注册（防止任何人注册一个
+// sales 账号就看到/改到整站业务数据），除非部署方显式 ALLOW_REGISTRATION=1。
+// 开发/演示环境（默认 development）保持开放，方便本地起号。
+$regEnv = trim((string) (getenv('ALLOW_REGISTRATION') ?: ''));
+define('ALLOW_REGISTRATION', $regEnv === ''
+    ? APP_ENV !== 'production'
+    : in_array(strtolower($regEnv), ['1', 'true', 'yes', 'on'], true));
+
 // Base URL path of the app (e.g. '' if served from domain root, or '/crm/public' etc).
 // URL_ROOT is auto-detected in bootstrap.php but can be forced here.
 define('URL_ROOT_OVERRIDE', ''); // leave blank to auto-detect

@@ -22,23 +22,21 @@ class DealController extends Controller
             $stages[$deal['stage']][] = $deal;
         }
 
-        $this->view('deals/index', ['stages' => $stages        ]);
+        $this->view('deals/index', ['stages' => $stages]);
     }
 
     public function create(): void
     {
         $this->requireAuth();
-        // 新建时明细必然是空的；表单里的“至少一行空行”由局部负责
-        $itemsForForm = [];
 
         $this->view('deals/create', [
             'customers' => $this->model('Customer')->all('name ASC'),
             'csrf' => $this->csrfToken(),
             'old' => [],
             'errors' => [],
-                    'products' => (new Product())->pickList(),
-                    'items'     => $itemsForForm,
-
+            'products' => (new Product())->pickList(),
+            // 新建时明细必然是空的；表单里的“至少一行空行”由局部负责
+            'items' => [],
         ]);
     }
 
@@ -58,22 +56,41 @@ class DealController extends Controller
             $errors = array_merge($errors, $dealItemCheck['errors']);
         }
 
+        // 商机从“进行中”开始：成交/丢单是流转的终点，只能由 update() 到达。
+        // 不然会出现“没有订单的成交商机”这类半成品（成交必须自动生成订单，
+        // 而那条生成链路在 update() 里，create 时不具备）。
+        if (in_array($data['stage'] ?? '', ['closed_won', 'closed_lost'], true)) {
+            $errors[] = '新建商机不能直接选「成交」或「丢单」：请先用「进行中」创建，再在编辑页推进到成交 / 丢单。';
+        }
+
         if ($errors) {
             $this->view('deals/create', [
                 'customers' => $this->model('Customer')->all('name ASC'),
                 'csrf' => $this->csrfToken(),
                 'old' => $_POST,
                 'errors' => $errors,
-                            'products' => (new Product())->pickList(),
-                            'items'     => $itemsForForm,
-
-        ]);
+                'products' => (new Product())->pickList(),
+                'items' => $this->itemsEcho($_POST),
+            ]);
             return;
         }
 
+        // 建档 + 阶段时间戳一次落库：任一失败就整体回滚，不留下半条记录。
         $data['owner_id'] = $_SESSION['user_id'];
-        $data['stage_open_at'] = date('Y-m-d H:i:s'); // new deals start as 'open'
-        $this->model('Deal')->create($data);
+        $stageAt = 'stage_' . $data['stage'] . '_at';
+        $data[$stageAt] = date('Y-m-d H:i:s');
+
+        $db = Database::connection();
+        $db->beginTransaction();
+        try {
+            $dealId = $this->model('Deal')->create($data);
+            $db->commit();
+        } catch (Throwable $e) {
+            $db->rollBack();
+            $this->setFlash('error', '商机创建失败：' . $e->getMessage());
+            $this->redirect('/deals');
+            return;
+        }
 
         $this->setFlash('success', '商机已创建。');
         $this->redirect('/deals');
@@ -105,9 +122,8 @@ class DealController extends Controller
             'attachments' => $this->model('Attachment')->byRelated('deal', (int) $id),
             'csrf' => $this->csrfToken(),
             'errors' => [],
-                    'products' => (new Product())->pickList(),
-                    'items'     => $itemsForForm,
-
+            'products' => (new Product())->pickList(),
+            'items' => $itemsForForm,
         ]);
     }
 
@@ -143,46 +159,51 @@ class DealController extends Controller
                 'attachments' => $this->model('Attachment')->byRelated('deal', (int) $id),
                 'csrf' => $this->csrfToken(),
                 'errors' => $errors,
-                            'products' => (new Product())->pickList(),
-                            'items'     => $itemsForForm,
-
-        ]);
+                'products' => (new Product())->pickList(),
+                'items' => $this->itemsEcho($_POST),
+            ]);
             return;
         }
 
-        // Auto-record stage transition time
-        if ($oldDeal['stage'] !== $data['stage']) {
-            $stageCol = 'stage_' . $data['stage'] . '_at';
-            $data[$stageCol] = date('Y-m-d H:i:s');
-        }
+        // 改字段 + 阶段流转 + “成交自动转订单 + 明细 + 附件继承” / “丢单归档”
+        // 是一笔事务：任一步失败全部回滚，不留“商机已成交但订单没生成”的半成品。
+        $db = Database::connection();
+        $db->beginTransaction();
+        try {
+            // Auto-record stage transition time
+            if ($oldDeal['stage'] !== $data['stage']) {
+                $stageCol = 'stage_' . $data['stage'] . '_at';
+                $data[$stageCol] = date('Y-m-d H:i:s');
+            }
 
-        $dealModel->update((int) $id, $data);
+            $dealModel->update((int) $id, $data);
 
-        // ==========================================
-        // 商机变更为 closed_won（成交）：自动创建订单，但不再归档，
-        // 商机保留在看板的"成交"列供查阅。
-        // ==========================================
-        if ($oldDeal['stage'] !== 'closed_won' && $data['stage'] === 'closed_won') {
-            $this->autoCreateOrderFromDeal($oldDeal, $_POST);
+            // 商机变更为 closed_won（成交）：自动创建订单，但不再归档，
+            // 商机保留在看板的"成交"列供查阅。
+            if ($oldDeal['stage'] !== 'closed_won' && $data['stage'] === 'closed_won') {
+                $this->autoCreateOrderFromDeal($oldDeal, $_POST);
+                $flash = '商机已成交并自动转为订单。';
+                $redirect = '/orders';
+            // 商机变更为 closed_lost（丢单）：自动归档，移出看板
+            } elseif ($oldDeal['stage'] !== 'closed_lost' && $data['stage'] === 'closed_lost') {
+                $dealModel->archive((int) $id);
+                $flash = '商机已标记为丢单并归档。';
+                $redirect = '/deals/archived';
+            } else {
+                $flash = '商机已更新。';
+                $redirect = '/deals';
+            }
 
-            $this->setFlash('success', '商机已成交并自动转为订单。');
-            $this->redirect('/orders');
+            $db->commit();
+        } catch (Throwable $e) {
+            $db->rollBack();
+            $this->setFlash('error', '商机更新失败：' . $e->getMessage());
+            $this->redirect('/deals');
             return;
         }
 
-        // ==========================================
-        // 商机变更为 closed_lost（丢单）：自动归档，移出看板
-        // ==========================================
-        if ($oldDeal['stage'] !== 'closed_lost' && $data['stage'] === 'closed_lost') {
-            $dealModel->archive((int) $id);
-
-            $this->setFlash('success', '商机已标记为丢单并归档。');
-            $this->redirect('/deals/archived');
-            return;
-        }
-
-        $this->setFlash('success', '商机已更新。');
-        $this->redirect('/deals');
+        $this->setFlash('success', $flash);
+        $this->redirect($redirect);
     }
 
     /**
@@ -194,13 +215,13 @@ class DealController extends Controller
         $itemModel = $this->model('OrderItem');
 
         // Check if order already exists for this deal
-        $existingOrders = $orderModel->byDeal((int) $deal['id'        ]);
+        $existingOrders = $orderModel->byDeal((int) $deal['id']);
         if (!empty($existingOrders)) {
             // Ensure attachments are copied even for previously created orders
             $existingOrderId = (int) $existingOrders[0]['id'];
             $existingAtts = $this->model('Attachment')->byRelated('order', $existingOrderId);
             if (empty($existingAtts)) {
-                $this->model('Attachment')->copyTo('deal', (int) $deal['id'], 'order', $existingOrderId, (int) $_SESSION['user_id'        ]);
+                $this->model('Attachment')->copyTo('deal', (int) $deal['id'], 'order', $existingOrderId, (int) $_SESSION['user_id']);
             }
             return;
         }
@@ -230,7 +251,7 @@ class DealController extends Controller
             'payment_status'  => 'unpaid',
             'order_date'      => date('Y-m-d'),
             'owner_id'        => $_SESSION['user_id'],
-                ]);
+        ]);
 
         // Create items if provided
         if (!empty($items)) {
@@ -260,13 +281,25 @@ class DealController extends Controller
             return;
         }
 
-        // Delete orders for this deal (set deal_id to null)
-        $orderModel = $this->model('Order');
-        foreach ($orderModel->byDeal((int) $id) as $order) {
-            $orderModel->update((int) $order['id'], ['deal_id' => null        ]);
+        // 解绑订单 + 删商机是一笔事务：中途失败不能留下“订单还指着已删除商机”的悬空状态
+        $db = Database::connection();
+        $db->beginTransaction();
+        try {
+            // Delete orders for this deal (set deal_id to null)
+            $orderModel = $this->model('Order');
+            foreach ($orderModel->byDeal((int) $id) as $order) {
+                $orderModel->update((int) $order['id'], ['deal_id' => null]);
+            }
+
+            $dealModel->delete((int) $id);
+            $db->commit();
+        } catch (Throwable $e) {
+            $db->rollBack();
+            $this->setFlash('error', '商机删除失败：' . $e->getMessage());
+            $this->redirect('/deals');
+            return;
         }
 
-        $dealModel->delete((int) $id);
         $this->setFlash('success', '商机已删除。');
         $this->redirect('/deals');
     }
@@ -278,7 +311,7 @@ class DealController extends Controller
 
         $deals = $this->model('Deal')->allArchived();
 
-        $this->view('deals/archived', ['deals' => $deals        ]);
+        $this->view('deals/archived', ['deals' => $deals]);
     }
 
     /** 取消归档 —— 丢单商机恢复后回到"进行中"列继续跟进 */
@@ -333,7 +366,7 @@ class DealController extends Controller
         if ($result['success']) {
             $this->setFlash('success', '附件上传成功。');
         } else {
-            $this->setFlash('error', $result['error'        ]);
+            $this->setFlash('error', $result['error']);
         }
 
         $this->redirect('/deals/' . $id . '/edit');
@@ -366,6 +399,39 @@ class DealController extends Controller
         $attachmentModel->remove((int) $attachmentId);
         $this->setFlash('success', '附件已删除。');
         $this->redirect('/deals/' . $dealId . '/edit');
+    }
+
+    /**
+     * 校验失败重回表单时，把用户刚填的行原样贴回去（别让人重打一遍明细）。
+     *
+     * 与 OrderController::itemsEcho() 同构；额外透传 legacy_name / legacy_price——
+     * 升级前的历史行不改动时靠这两个字段在 OrderItem::normalizeRows() 里原样保留。
+     */
+    private function itemsEcho(array $post): array
+    {
+        $out = [];
+        foreach ((array) ($post['items'] ?? []) as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            if (trim((string) ($row['product_name'] ?? '')) === ''
+                && trim((string) ($row['product_id'] ?? '')) === ''
+                && trim((string) ($row['legacy_name'] ?? '')) === '') {
+                continue;                                 // 全空行
+            }
+            $out[] = [
+                'product_id'   => trim((string) ($row['product_id'] ?? '')),
+                'product_name' => trim((string) ($row['product_name'] ?? '')),
+                'sku'          => trim((string) ($row['sku'] ?? '')),
+                'quantity'     => (string) ($row['quantity'] ?? '1'),
+                'unit_price'   => (string) ($row['unit_price'] ?? '0'),
+                'unit'         => trim((string) ($row['unit'] ?? '件')),
+                'notes'        => trim((string) ($row['notes'] ?? '')),
+                'legacy_name'  => trim((string) ($row['legacy_name'] ?? '')),
+                'legacy_price' => trim((string) ($row['legacy_price'] ?? '')),
+            ];
+        }
+        return $out;
     }
 
     private function validate(array $input): array

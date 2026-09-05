@@ -401,6 +401,10 @@ INSERT OR IGNORE INTO app_settings (name, value) VALUES
 ('ai_mode',        'preview'),
 ('ai_temperature', '0.2');
 
+-- >>> DEMO_DATA_BEGIN >>>
+-- 以下为演示用业务样例数据（商品 / 客户 / 线索 / 商机 / 订单 / 跟进）。
+-- 生产新库可用 `php database/migrate.php --no-demo` 或环境变量 CRM_DEMO_DATA=0
+-- 跳过整段（管理员账号与系统设置始终会建）。
 -- 1c. Sample products (商品库：名称与下面 sample order items 对得上，
 --     所以一个全新库装完就能直接“从商品里选”，不会先被空目录拦住)
 --     注意：不写 public_code，与其他表一致，由 Model 自动派生/迁移回填。
@@ -456,3 +460,5 @@ INSERT OR IGNORE INTO order_items (id, order_id, product_name, sku, quantity, un
 INSERT OR IGNORE INTO follow_ups (id, customer_id, user_id, type, title, description, next_action, next_date) VALUES
 (1, 1, 1, 'price_comparison', 'Initial Quote Comparison', 'Customer compared our quote against competitor A', 'Send customized discount proposal', date('now', '+3 days')),
 (2, 2, 1, 'follow_up', 'Contract Renewal Discussion', 'Discussed annual support SLA terms', 'Send updated draft contract', date('now', '+7 days'));
+
+-- >>> DEMO_DATA_END >>>

@@ -25,12 +25,12 @@ function dbColumns(string $dbFile, string $table): array
 }
 
 /** Run migrate.php against $dbFile; returns [exitCode, output]. */
-function runMigrate(string $dbFile): array
+function runMigrate(string $dbFile, string $extra = ''): array
 {
     $out = [];
     $code = 0;
     exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(MIGRATE_PHP)
-        . ' --db=' . escapeshellarg($dbFile) . ' 2>&1', $out, $code);
+        . ' --db=' . escapeshellarg($dbFile) . ($extra !== '' ? ' ' . $extra : '') . ' 2>&1', $out, $code);
     return [$code, implode("\n", $out)];
 }
 
@@ -185,6 +185,42 @@ function test_skipped_increments_are_recorded_once(): void
         assertEquals($count, (int) $pdo->query('SELECT COUNT(*) FROM _migrations')->fetchColumn(),
             'no duplicate _migrations rows on re-run');
         unset($pdo);
+    } finally {
+        @unlink($db);
+    }
+}
+
+/**
+ * --no-demo（或 CRM_DEMO_DATA=0）跳过演示业务数据，但管理员与系统默认设置始终要建。
+ */
+function test_no_demo_flag_skips_sample_rows_but_keeps_admin_and_settings(): void
+{
+    $db = tempDb('nodemo');
+    try {
+        [$code, $out] = runMigrate($db, '--no-demo');
+        assertEquals(0, $code, 'migrate --no-demo exits 0: ' . $out);
+
+        $pdo = new PDO('sqlite:' . $db, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        assertEquals(1, (int) $pdo->query("SELECT COUNT(*) FROM users WHERE email = 'admin@example.com'")->fetchColumn(),
+            '管理员账号始终建');
+        assertTrue((int) $pdo->query('SELECT COUNT(*) FROM app_settings')->fetchColumn() >= 2, '系统默认设置始终建');
+        foreach (['customers', 'products', 'leads', 'deals', 'orders', 'order_items', 'follow_ups'] as $table) {
+            assertEquals(0, (int) $pdo->query('SELECT COUNT(*) FROM ' . $table)->fetchColumn(),
+                "演示数据不落地：{$table} 为空");
+        }
+        assertContains('demo sample data skipped', $out, '输出里说明跳过了演示数据');
+
+        // 默认（不带开关）仍带样例：证明开关只影响演示段，不影响普通建库
+        $db2 = tempDb('withdemo');
+        try {
+            [$code2, $out2] = runMigrate($db2);
+            assertEquals(0, $code2, 'plain migrate exits 0: ' . $out2);
+            $pdo2 = new PDO('sqlite:' . $db2, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+            assertTrue((int) $pdo2->query('SELECT COUNT(*) FROM customers')->fetchColumn() > 0,
+                '默认建库仍含样例客户');
+        } finally {
+            @unlink($db2);
+        }
     } finally {
         @unlink($db);
     }

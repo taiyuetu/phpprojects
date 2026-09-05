@@ -13,6 +13,9 @@
     </div>
 <?php endif; ?>
 
+<?php if (!empty($closed)): ?>
+    <p class="text-muted small mb-3">新账号注册由部署方管理（未开放）。<a href="<?= url('/login') ?>">返回登录</a></p>
+<?php else: ?>
 <form method="POST" action="<?= url('/register') ?>">
     <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
 
@@ -34,6 +37,7 @@
     </div>
     <button type="submit" class="btn btn-primary w-100">注册</button>
 </form>
+<?php endif; ?>
 
 <p class="text-center mt-3 mb-0 small text-muted">
     已有账号？<a href="<?= url('/login') ?>">去登录</a>

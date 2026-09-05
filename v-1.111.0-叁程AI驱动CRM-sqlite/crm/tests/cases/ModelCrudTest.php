@@ -67,4 +67,31 @@ function test_user_model_helpers(): void
     assertTrue($threw, 'duplicate email rejected by unique constraint');
 }
 
+/** 客户搜索里的 % / _ 必须当字面量而不是 LIKE 通配符（回归：输入 % 会匹配整表） */
+function test_customer_search_escapes_like_wildcards(): void
+{
+    $c = new Customer();
+    $c->create(['name' => '100%棉纺', 'company' => 'C1', 'status' => 'active', 'owner_id' => 1]);
+    $c->create(['name' => 'AB_CD 贸易', 'company' => 'C2', 'status' => 'active', 'owner_id' => 1]);
+    $c->create(['name' => '普通客户', 'company' => 'C3', 'status' => 'active', 'owner_id' => 1]);
+
+    // '%' 按字面量搜：只有名字里真带百分号的那条命中；修复前它匹配全部 3 条。
+    $pct = $c->allWithOwner('%', 1, 15);
+    assertEquals(1, count($pct), '百分号被当字面量，不会变成匹配整表的通配符');
+    assertEquals('100%棉纺', $pct[0]['name'], '命中精确那一条');
+    assertEquals(1, (int) $c->countWithOwner('%'), 'count 与列表同一份 WHERE');
+
+    // '_' 同理
+    $under = $c->allWithOwner('AB_CD', 1, 15);
+    assertEquals(1, count($under), '下划线被当字面量');
+    assertEquals('AB_CD 贸易', $under[0]['name'], '命中精确那一条');
+
+    // 反斜杠也要安全：结尾反斜杠不该当转义符吞掉下一个字符
+    $bs = $c->allWithOwner('100\\', 1, 15);
+    assertEquals(0, count($bs), '结尾反斜杠搜索安全（此处无命中）');
+
+    // 普通词搜索不受影响
+    assertEquals(1, count($c->allWithOwner('普通客户', 1, 15)), '普通搜索照常');
+}
+
 runCase();

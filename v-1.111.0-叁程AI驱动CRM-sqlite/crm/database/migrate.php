@@ -28,7 +28,7 @@
  */
 
 // ---------- 参数解析 ----------
-$opts = getopt('', ['db::', 'status', 'help']);
+$opts = getopt('', ['db::', 'status', 'help', 'no-demo']);
 $statusOnly = isset($opts['status']);
 $dbPath = $opts['db'] ?? null;
 if ($dbPath !== null) {
@@ -43,6 +43,7 @@ Usage:
   php database/migrate.php                 create or upgrade the database
   php database/migrate.php --status        show applied migrations and tables
   php database/migrate.php --db=PATH       use a specific sqlite file
+  php database/migrate.php --no-demo       skip demo sample data (products/customers/leads/deals/orders/follow-ups)
 TXT;
     exit(0);
 }
@@ -144,6 +145,12 @@ function execFile(PDO $pdo, string $file, string $label): void
     if ($sql === false) {
         throw new RuntimeException("Cannot read {$file}");
     }
+    execSql($pdo, $sql, $label);
+}
+
+/** 执行一段 SQL；尝试包事务；返回抛错前已执行部分的风险由"执行成功才记录"兜底 */
+function execSql(PDO $pdo, string $sql, string $label): void
+{
     // PRAGMA journal_mode / foreign_keys 不能在事务内执行
     $canTx = stripos($sql, 'journal_mode') === false && stripos($sql, 'PRAGMA ') === false;
     if ($canTx) {
@@ -210,10 +217,41 @@ if ($statusOnly) {
     exit(0);
 }
 
+// ---------- 演示数据开关 ----------
+// 默认带一套演示业务数据（本地跑起来直接有货可看）；生产新库建议用
+// `--no-demo` 或环境变量 CRM_DEMO_DATA=0 跳过（管理员账号与系统设置始终会建）。
+$demoData = true;
+if (array_key_exists('no-demo', $opts)) {
+    $demoData = false;
+} else {
+    $envDemo = getenv('CRM_DEMO_DATA');
+    if ($envDemo === false || trim($envDemo) === '') {
+        $envFile = $baseDir . '/.env';
+        if (is_readable($envFile)) {
+            foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+                $line = trim($line);
+                if (str_starts_with($line, 'CRM_DEMO_DATA=')) {
+                    $envDemo = trim(substr($line, strlen('CRM_DEMO_DATA=')), " \t\"'");
+                    break;
+                }
+            }
+        }
+    }
+    $envDemo = trim((string) $envDemo);
+    if ($envDemo !== '') {
+        $demoData = in_array(strtolower($envDemo), ['1', 'true', 'yes', 'on'], true);
+    }
+}
+
 // ---------- 1) 应用基线 schema.sql (幂等，每次都跑 => 自愈) ----------
 echo PHP_EOL . '== Baseline ==' . PHP_EOL;
 $pdo->exec('PRAGMA foreign_keys = ON');
-execFile($pdo, $schemaFile, 'schema.sql (baseline)');
+$schemaSql = (string) file_get_contents($schemaFile);
+if (!$demoData) {
+    $schemaSql = (string) preg_replace('/-- >>> DEMO_DATA_BEGIN >>>.*?-- >>> DEMO_DATA_END >>>/s', '', $schemaSql);
+    echo '  note: demo sample data skipped (CRM_DEMO_DATA=0 / --no-demo)' . PHP_EOL;
+}
+execSql($pdo, $schemaSql, 'schema.sql (baseline)');
 
 // ---------- 2) 应用未执行的增量迁移 ----------
 echo '== Incremental migrations ==' . PHP_EOL;

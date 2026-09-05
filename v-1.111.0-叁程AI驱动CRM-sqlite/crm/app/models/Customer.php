@@ -20,16 +20,9 @@ class Customer extends Model
         $params = [];
 
         if ($search !== '') {
-            $sql .= " WHERE c.name LIKE :search_name OR c.company LIKE :search_company OR c.email LIKE :search_email OR c.phone LIKE :search_phone OR c.whatsapp LIKE :search_whatsapp OR c.wechat LIKE :search_wechat OR c.source_country LIKE :search_country OR c.notes LIKE :search_notes";
-            $searchVal = '%' . $search . '%';
-            $params[':search_name'] = $searchVal;
-            $params[':search_company'] = $searchVal;
-            $params[':search_email'] = $searchVal;
-            $params[':search_phone'] = $searchVal;
-            $params[':search_whatsapp'] = $searchVal;
-            $params[':search_wechat'] = $searchVal;
-            $params[':search_country'] = $searchVal;
-            $params[':search_notes'] = $searchVal;
+            [$where, $sparams] = $this->customerSearchWhere($search);
+            $sql .= ' WHERE ' . $where;
+            $params = array_merge($params, $sparams);
         }
 
         $sql .= " ORDER BY c.created_at DESC LIMIT :limit OFFSET :offset";
@@ -50,16 +43,9 @@ class Customer extends Model
         $params = [];
 
         if ($search !== '') {
-            $sql .= " WHERE c.name LIKE :search_name OR c.company LIKE :search_company OR c.email LIKE :search_email OR c.phone LIKE :search_phone OR c.whatsapp LIKE :search_whatsapp OR c.wechat LIKE :search_wechat OR c.source_country LIKE :search_country OR c.notes LIKE :search_notes";
-            $searchVal = '%' . $search . '%';
-            $params[':search_name'] = $searchVal;
-            $params[':search_company'] = $searchVal;
-            $params[':search_email'] = $searchVal;
-            $params[':search_phone'] = $searchVal;
-            $params[':search_whatsapp'] = $searchVal;
-            $params[':search_wechat'] = $searchVal;
-            $params[':search_country'] = $searchVal;
-            $params[':search_notes'] = $searchVal;
+            [$where, $sparams] = $this->customerSearchWhere($search);
+            $sql .= ' WHERE ' . $where;
+            $params = array_merge($params, $sparams);
         }
 
         $stmt = $this->db()->query($sql);
@@ -67,6 +53,27 @@ class Customer extends Model
             $stmt->bind($key, $value);
         }
         return (int) ($stmt->single()['total'] ?? 0);
+    }
+
+    /**
+     * 跨列搜索的 WHERE 片段（c 是 customers 的别名）。
+     *
+     * 用户输入的 '%' / '_' 必须先转义，否则一个 % 就是“匹配整表”；SQLite 的 LIKE
+     * 默认不设 escape 字符，所以每一处 LIKE 都要带 ESCAPE '\'（与 Ai::likeValue() 同口径）。
+     *
+     * @return array{0:string, 1:array<string,string>} [where 片段, 参数]
+     */
+    private function customerSearchWhere(string $search): array
+    {
+        $term = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $search) . '%';
+        $bits = [];
+        $params = [];
+        foreach (['name', 'company', 'email', 'phone', 'whatsapp', 'wechat', 'source_country', 'notes'] as $col) {
+            $key = ':sc_' . $col;
+            $bits[] = "c.{$col} LIKE {$key} ESCAPE '\\'";
+            $params[$key] = $term;
+        }
+        return [implode(' OR ', $bits), $params];
     }
 
     public function findWithOwner(int $id)

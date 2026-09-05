@@ -37,6 +37,17 @@ require APP_PATH . '/core/Router.php';
 // ---- Session ----
 session_name(SESSION_NAME);
 if (session_status() !== PHP_SESSION_ACTIVE) {
+    // Cookie 加固：HttpOnly 防脚本偷会话；SameSite=Lax 让跨站 POST（含删除/退登）
+    // 不携带会话 cookie，配合各控制器里的 CSRF 校验；HTTPS（或反代转发）下再加 Secure。
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path'     => '/',
+        'domain'   => '',
+        'secure'   => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+                      || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https'),
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
     session_start();
 }
 

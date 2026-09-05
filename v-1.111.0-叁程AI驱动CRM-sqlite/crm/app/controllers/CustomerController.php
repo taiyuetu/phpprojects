@@ -137,25 +137,37 @@ class CustomerController extends Controller
             return;
         }
 
-        // Delete orders for this customer
-        $orderModel = $this->model('Order');
-        foreach ($orderModel->where('customer_id', $customerId) as $order) {
-            $orderModel->delete((int) $order['id']);
+        // 客户 + 名下线索/商机/订单是一笔事务：中途失败不能留下“订单在、客户没了”的半成品
+        $db = Database::connection();
+        $db->beginTransaction();
+        try {
+            // Delete orders for this customer
+            $orderModel = $this->model('Order');
+            foreach ($orderModel->where('customer_id', $customerId) as $order) {
+                $orderModel->delete((int) $order['id']);
+            }
+
+            // Delete leads that were converted to create this customer
+            $leadModel = $this->model('Lead');
+            foreach ($leadModel->where('customer_id', $customerId) as $lead) {
+                $leadModel->delete((int) $lead['id']);
+            }
+
+            // Delete deals (CASCADE would handle this, but be explicit)
+            $dealModel = $this->model('Deal');
+            foreach ($dealModel->where('customer_id', $customerId) as $deal) {
+                $dealModel->delete((int) $deal['id']);
+            }
+
+            $customerModel->delete($customerId);
+            $db->commit();
+        } catch (Throwable $e) {
+            $db->rollBack();
+            $this->setFlash('error', '客户删除失败：' . $e->getMessage());
+            $this->redirect('/customers');
+            return;
         }
 
-        // Delete leads that were converted to create this customer
-        $leadModel = $this->model('Lead');
-        foreach ($leadModel->where('customer_id', $customerId) as $lead) {
-            $leadModel->delete((int) $lead['id']);
-        }
-
-        // Delete deals (CASCADE would handle this, but be explicit)
-        $dealModel = $this->model('Deal');
-        foreach ($dealModel->where('customer_id', $customerId) as $deal) {
-            $dealModel->delete((int) $deal['id']);
-        }
-
-        $customerModel->delete($customerId);
         $this->setFlash('success', '客户及关联的线索、商机、订单已删除。');
         $this->redirect('/customers');
     }

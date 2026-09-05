@@ -73,7 +73,23 @@ class OrderController extends Controller
         }
 
         $data['owner_id'] = $_SESSION['user_id'];
-        $orderId = $this->model('Order')->create($data);
+        $orderModel = $this->model('Order');
+
+        // 编号是表单上的“建议值”：撞上已存在的编号（并发同时开单、或有人手改）
+        // 就换一个新号再存，绝不落到 500（DB 的 UNIQUE 是最后防线，不是唯一防线）。
+        if ($data['order_number'] === '' || $orderModel->numberInUse($data['order_number'])) {
+            $data['order_number'] = $orderModel->generateOrderNumber();
+        }
+        try {
+            $orderId = $orderModel->create($data);
+        } catch (PDOException $e) {
+            if (stripos((string) $e->getMessage(), 'unique') === false) {
+                throw $e;
+            }
+            // 极端竞态：预检后仍然撞了 UNIQUE —— 换号重试一次
+            $data['order_number'] = $orderModel->generateOrderNumber();
+            $orderId = $orderModel->create($data);
+        }
 
         // Sync items
         if (!empty($parsed['items'])) {
@@ -160,7 +176,19 @@ class OrderController extends Controller
             return;
         }
 
-        $orderModel->update((int) $id, $data);
+        // 编号不能撞到别的订单（自己的旧号不算）；撞了就换一个新号，不 500。
+        if ($data['order_number'] === '' || $orderModel->numberInUse($data['order_number'], (int) $order['id'])) {
+            $data['order_number'] = $orderModel->generateOrderNumber();
+        }
+        try {
+            $orderModel->update((int) $id, $data);
+        } catch (PDOException $e) {
+            if (stripos((string) $e->getMessage(), 'unique') === false) {
+                throw $e;
+            }
+            $data['order_number'] = $orderModel->generateOrderNumber();
+            $orderModel->update((int) $id, $data);
+        }
 
         // Sync items
         $this->model('OrderItem')->syncItems((int) $id, $parsed['items']);

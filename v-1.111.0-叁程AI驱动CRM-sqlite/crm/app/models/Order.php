@@ -102,7 +102,32 @@ class Order extends Model
         return $result ?: null;
     }
 
-    /** Generate next order number. */
+    /** Is this order_number already in use by another order? */
+    public function numberInUse(string $number, ?int $exceptId = null): bool
+    {
+        if (trim($number) === '') {
+            return false;
+        }
+        $sql = 'SELECT id FROM orders WHERE order_number = :n';
+        if ($exceptId !== null) {
+            $sql .= ' AND id <> :id';
+        }
+        $stmt = $this->db()->query($sql)->bind(':n', trim($number));
+        if ($exceptId !== null) {
+            $stmt->bind(':id', $exceptId, PDO::PARAM_INT);
+        }
+        return (bool) $stmt->single();
+    }
+
+    /**
+     * Generate next order number.
+     *
+     * The suffix is derived from the current highest number, but that only gives
+     * a *suggestion*: the same second two people open the create page and both
+     * submit it, or a client tampered the hidden field to a number that already
+     * exists. So after guessing, bump past any number that is actually taken —
+     * the DB UNIQUE constraint stays the last line of defence, never the only one.
+     */
     public function generateOrderNumber(): string
     {
         $year = date('Y');
@@ -112,14 +137,13 @@ class Order extends Model
             "SELECT order_number FROM orders WHERE order_number LIKE :prefix ORDER BY id DESC LIMIT 1"
         )->bind(':prefix', $prefix . '%')->single();
 
-        if ($lastOrder) {
-            $lastNum = (int) substr($lastOrder['order_number'], -3);
-            $nextNum = $lastNum + 1;
-        } else {
-            $nextNum = 1;
-        }
+        $nextNum = $lastOrder ? (int) substr($lastOrder['order_number'], -3) + 1 : 1;
+        do {
+            $candidate = $prefix . str_pad($nextNum, 3, '0', STR_PAD_LEFT);
+            $nextNum++;
+        } while ($this->numberInUse($candidate));
 
-        return $prefix . str_pad($nextNum, 3, '0', STR_PAD_LEFT);
+        return $candidate;
     }
 
     /** Get total order amount. */

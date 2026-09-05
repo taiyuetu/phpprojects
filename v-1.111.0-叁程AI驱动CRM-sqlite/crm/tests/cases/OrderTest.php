@@ -97,4 +97,42 @@ function test_order_queries_and_status_helpers(): void
     assertEquals(0.0, $o->totalAmount('cancelled'), 'no cancelled orders yet');
 }
 
+/** 生成器必须跳过已占用的编号；numberInUse 能排除自身（改自己订单号时不算撞车） */
+function test_generate_order_number_skips_taken_and_number_in_use(): void
+{
+    $cust = seedOrderCustomer();
+    $o = new Order();
+    $n1 = $o->generateOrderNumber();
+    $id1 = $o->create([
+        'order_number' => $n1, 'customer_id' => (int) $cust['id'],
+        'title' => 'Occupied number', 'owner_id' => 1,
+    ]);
+    assertTrue($o->numberInUse($n1), '已存在的编号能被查出来');
+    assertTrue(!$o->numberInUse($n1, (int) $id1), '排除自身后不算占用');
+    $n2 = $o->generateOrderNumber();
+    assertTrue($n1 !== $n2, '生成器不会把已占用的编号再吐出来');
+}
+
+/**
+ * 明细行局部必须给每一行递增索引。
+ * 回归：两行都渲染成 items[0][...] 时，提交后同名表单字段互相覆盖，只剩最后一行。
+ */
+function test_items_fields_render_unique_row_indexes(): void
+{
+    $rows = [
+        ['product_id' => '11', 'product_name' => '第一行 轴承6206', 'quantity' => '2', 'unit_price' => '10', 'unit' => '件'],
+        ['product_id' => '12', 'product_name' => '第二行 轴承6306', 'quantity' => '1', 'unit_price' => '20', 'unit' => '件'],
+    ];
+    ob_start();
+    $items = $rows;
+    $products = [];
+    include APP_PATH . '/views/partials/_items_fields.php';
+    $html = (string) ob_get_clean();
+
+    assertTrue(substr_count($html, 'name="items[0][product_id]"') === 1, '第一行使用索引 0');
+    assertTrue(substr_count($html, 'name="items[1][product_id]"') === 1, '第二行使用索引 1');
+    assertContains('第一行 轴承6206', $html, '两行内容都在');
+    assertContains('第二行 轴承6306', $html);
+}
+
 runCase();

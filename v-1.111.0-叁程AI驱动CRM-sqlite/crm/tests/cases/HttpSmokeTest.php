@@ -70,8 +70,16 @@ function withTestServer(string $tag, callable $fn): void
         assertTrue($up, 'server became reachable');
 
         // Log in through the real form (CSRF protected).
-        $loginPage = $http->get($base . '/login')['body'];
+        $loginPageRes = $http->get($base . '/login');
+        $loginPage = $loginPageRes['body'];
         assertTrue(str_contains($loginPage, 'csrf_token'), 'login page shows form');
+
+        // First session_start is what issues the session cookie, so its attributes
+        // (set in bootstrap.php before session_start) must be visible right here.
+        $cookie = implode(' ', $http->lastHeaders['set-cookie'] ?? []);
+        assertContains('HttpOnly', $cookie, 'session cookie is HttpOnly');
+        assertContains('SameSite=Lax', $cookie, 'session cookie is SameSite=Lax');
+
         preg_match('/name="csrf_token" value="([^"]+)"/', $loginPage, $m);
         assertTrue(!empty($m[1]), 'csrf token found on login page');
 
@@ -501,6 +509,65 @@ function test_csrf_guard_covers_destroy_endpoints_and_logout(): void
         $http->post($base . '/logout', ['csrf_token' => $csrf]);
         $visit = $http->get($base . '/customers');
         assertTrue(str_contains($visit['url'], '/login'), 'logout 成功后受保护页弹回登录页');
+    });
+}
+
+/**
+ * 两个“保存时防数据丢失”的硬化流：
+ *  1) deals store 校验失败 → 表单回显用户刚填的明细行（回归：Undefined $itemsForForm + 吞行）
+ *  2) orders store 撞号的建议编号 → 自动换新号落库，而不是 500（回归：UNIQUE 冲突炸页面）
+ */
+function test_save_time_data_loss_regressions(): void
+{
+    $cust = (int) (new Customer())->create(['name' => '硬化流客户', 'status' => 'active', 'owner_id' => 1]);
+    withTestServer('harden', function (TestHttp $http, string $base, string $csrf) use ($cust): void {
+        // 1) 商机：标题留空触发校验错误，用户刚填的明细行必须原样回到表单
+        $res = $http->post($base . '/deals', [
+            'csrf_token' => $csrf,
+            'title' => '',
+            'customer_id' => (string) $cust,
+            'value' => '0',
+            'stage' => 'open',
+            'close_date' => '',
+            'items' => [
+                ['product_id' => '', 'product_name' => '回显行·轴承6206', 'quantity' => '2', 'unit_price' => '9.9', 'unit' => '件'],
+            ],
+        ]);
+        assertEquals(200, $res['code'], 'deals 校验失败回到 200 的表单页');
+        assertContains('商机名称不能为空', $res['body'], '错误信息可见');
+        assertContains('回显行·轴承6206', $res['body'], '刚填的明细行原样回显');
+        assertTrue(!str_contains($res['body'], 'Undefined variable'), '不再有未定义变量告警漏出');
+
+        // 2) 订单：同秒开单或手改编号撞同一个号 → 换新号存，绝不 500
+        $dup = 'ORD-DUP-7777';
+        $first = $http->post($base . '/orders', [
+            'csrf_token' => $csrf,
+            'order_number' => $dup, 'title' => '撞号单 A', 'customer_id' => (string) $cust,
+            'amount' => '0', 'status' => 'pending', 'payment_status' => 'unpaid',
+            'order_date' => date('Y-m-d'),
+        ]);
+        assertEquals(200, $first['code'], '第一单保存成功');
+        $second = $http->post($base . '/orders', [
+            'csrf_token' => $csrf,
+            'order_number' => $dup, 'title' => '撞号单 B', 'customer_id' => (string) $cust,
+            'amount' => '0', 'status' => 'pending', 'payment_status' => 'unpaid',
+            'order_date' => date('Y-m-d'),
+        ]);
+        assertEquals(200, $second['code'], '第二单不 500（编号自动换新）');
+
+        $orders = (new Order())->all('id ASC');
+        assertEquals(2, count($orders), '两单都在库里');
+        assertTrue($orders[0]['order_number'] !== $orders[1]['order_number'], '编号未被重复占用');
+        assertContains('ORD-', $orders[1]['order_number'], '新号保持 ORD- 前缀格式');
+
+        // 3) 商机不能“直接以成交/丢单创建”：成交必须走 update() 那条自动生成订单的链路
+        $res3 = $http->post($base . '/deals', [
+            'csrf_token' => $csrf, 'title' => '直接成交', 'customer_id' => (string) $cust,
+            'value' => '100', 'stage' => 'closed_won', 'close_date' => '', 'items' => [],
+        ]);
+        assertEquals(200, $res3['code'], 'closed_won 直接创建被拦回表单页');
+        assertContains('新建商机不能直接选', $res3['body'], '页面说明正确做法');
+        assertEquals(0, (int) (new Deal())->count(), '没有创建出任何商机');
     });
 }
 

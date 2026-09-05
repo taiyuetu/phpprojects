@@ -90,6 +90,8 @@ Notes:
    - **Fresh install** → creates `database/crm.sqlite`, all tables, indexes, triggers and seeds:
      - Demo login: `admin@example.com` / `password`
      - 3 sample customers, 2 leads, 2 deals
+   - 生产新库不想带演示业务数据：`php database/migrate.php --no-demo`（或 `.env` 里 `CRM_DEMO_DATA=0`）。
+     管理员账号与系统默认设置始终会建，跳过的只是商品/客户/线索/商机/订单/跟进那套样例。
    - **Existing / outdated database** → `schema.sql` is fully idempotent
      (`CREATE … IF NOT EXISTS` / `INSERT OR IGNORE`), so missing tables/columns/seeds
      are re-created automatically. If a table is missing (e.g. `no such table` errors),
@@ -213,11 +215,15 @@ No other file needs to change — routing, DB access, and layout wrapping all co
 - Passwords are hashed with `password_hash()` (bcrypt).
 - All forms include CSRF tokens, verified on every POST/PUT/DELETE.
 - All SQL goes through PDO prepared statements.
+- Session cookies are `HttpOnly` + `SameSite=Lax` (and `Secure` over HTTPS).
+- **Registration is closed in `production`** unless you set `ALLOW_REGISTRATION=1` (dev/demo stays open,
+  so you can onboard colleagues locally). Rotate the demo admin password (or delete the seed user) before
+  using this beyond local development — the seeded admin is `admin@example.com` / `password`.
 - Change `APP_ENV` to `production` in `config.php` before deploying (disables verbose error output).
 - The AI assistant cannot execute arbitrary SQL or tools: it answers with a JSON plan that is checked against a
   hard-coded whitelist (`Ai::tools()`), the caller's data permissions, and value ranges, and every run is audited
   in `ai_actions`. Written data always goes through the existing models, never through model-generated SQL.
-- Rotate the demo admin password (or delete the seed user) before using this beyond local development.
+- 界面默认“登录即可协作”（负责人是标签不是边界，FAQ 有说明）；AI 助手则强制 owner-or-admin 归属规则。
 
 ## 版权 / Copyright
 

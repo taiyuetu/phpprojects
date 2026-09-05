@@ -87,12 +87,29 @@ class AuthController extends Controller
         if (isLoggedIn()) {
             $this->redirect('/');
         }
-        $this->view('auth/register', ['csrf' => $this->csrfToken()], 'auth');
+        $closed = !ALLOW_REGISTRATION;
+        $this->view('auth/register', [
+            'csrf'   => $this->csrfToken(),
+            'old'    => [],
+            'errors' => $closed ? [self::registrationClosedMessage()] : [],
+            'closed' => $closed,
+        ], 'auth');
+    }
+
+    private static function registrationClosedMessage(): string
+    {
+        return '新账号注册已关闭：请联系管理员开通账号，或在部署环境变量里设置 ALLOW_REGISTRATION=1 后再开放。';
     }
 
     public function register(): void
     {
         $this->verifyCsrf();
+
+        if (!ALLOW_REGISTRATION) {
+            $this->setFlash('error', self::registrationClosedMessage());
+            $this->redirect('/login');
+            return;
+        }
 
         $name = trim($_POST['name'] ?? '');
         $email = trim($_POST['email'] ?? '');
