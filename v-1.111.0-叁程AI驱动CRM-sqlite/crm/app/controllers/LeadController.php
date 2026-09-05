@@ -112,6 +112,7 @@ class LeadController extends Controller
     public function destroy(string $id): void
     {
         $this->requireAuth();
+        $this->verifyCsrf();
 
         $leadModel = $this->model('Lead');
         $lead = $leadModel->find((int) $id);

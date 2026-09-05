@@ -22,10 +22,15 @@ $selected = (string) ($selected ?? '');
 $legacyJson = is_array($legacy ?? null) ? json_encode((array) $legacy, JSON_UNESCAPED_UNICODE) : '';
 // 有 legacy 时不加 required：这种行允许“原样保留”，不能被浏览器拦在提交前；
 // 一旦用户改了名称或价格，服务端仍会要求他从商品库里选。
+//
+// 历史行名称是用户可自由输入的快照文本，必须整体当作普通文本转义后再放进
+// 单引号属性：json_encode 不转义单引号，裸输出时一个 ' 就能关掉 data-legacy
+// 属性注入任意 HTML（存储型 XSS）。e() 把引号 / < > / & 变成实体，浏览器解析
+// 属性时自动解码，所以 dataset.legacy 拿到的仍是原样 JSON，JSON.parse 不受影响。
 ?>
 <div class="product-picker"
      data-selected="<?= e($selected) ?>"
-     <?php if ($legacyJson !== ''): ?>data-legacy='<?= $legacyJson ?>'<?php endif; ?>>
+     <?php if ($legacyJson !== ''): ?>data-legacy='<?= e($legacyJson) ?>'<?php endif; ?>>
     <input type="text"
            class="form-control form-control-sm mb-1 picker-search"
            placeholder="搜索商品：名称 / SKU / 规格"

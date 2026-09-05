@@ -172,6 +172,7 @@ class OrderController extends Controller
     public function destroy(string $id): void
     {
         $this->requireAuth();
+        $this->verifyCsrf();
 
         $orderModel = $this->model('Order');
         $order = $orderModel->find((int) $id);

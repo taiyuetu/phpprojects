@@ -455,4 +455,53 @@ function test_stable_codes_are_visible_on_the_pages(): void
     });
 }
 
+/**
+ * 服务端 CSRF 闸门必须覆盖四个 destroy 端点与 logout：列表/退出表单本来就带
+ * token，缺的是服务器校验。补上之后，没带 / 伪造 token 的跨站删除要被 419 拦下，
+ * 而带真 token 的正常删除（真实表单）照常执行。
+ */
+function test_csrf_guard_covers_destroy_endpoints_and_logout(): void
+{
+    $custId = (int) (new Customer())->create(['name' => 'CSRF 客户', 'status' => 'active', 'owner_id' => 1]);
+    $leadId = (int) (new Lead())->create(['title' => 'CSRF 线索', 'status' => 'new', 'owner_id' => 1]);
+    $cust2  = (int) (new Customer())->create(['name' => 'CSRF 客户二', 'status' => 'active', 'owner_id' => 1]);
+    $dealId = (int) (new Deal())->create([
+        'title' => 'CSRF 商机', 'customer_id' => $cust2, 'stage' => 'open', 'owner_id' => 1,
+    ]);
+    $orderId = (int) (new Order())->create([
+        'order_number' => 'ORD-CSRF-0001', 'customer_id' => $cust2,
+        'title' => 'CSRF 订单', 'status' => 'pending', 'owner_id' => 1,
+    ]);
+
+    withTestServer('csrf', function (TestHttp $http, string $base, string $csrf) use ($custId, $leadId, $dealId, $orderId): void {
+        // 没带 token / 伪造 token：四个 destroy 端点都必须被 419 拦下，而不是默默删除
+        foreach (['/customers/' . $custId, '/leads/' . $leadId, '/deals/' . $dealId, '/orders/' . $orderId] as $url) {
+            $res = $http->post($base . $url, ['_method' => 'DELETE']);
+            assertEquals(419, $res['code'], "DELETE {$url} 不带 token → 419");
+            assertContains('CSRF', $res['body'], '419 页面说明是 CSRF 校验失败');
+            $res = $http->post($base . $url, ['_method' => 'DELETE', 'csrf_token' => 'forged-token']);
+            assertEquals(419, $res['code'], "DELETE {$url} 带伪造 token → 419");
+        }
+
+        // 带真 token：与页面表单一致的请求必须照常删掉
+        $http->post($base . '/customers/' . $custId, ['_method' => 'DELETE', 'csrf_token' => $csrf]);
+        assertEquals(false, (bool) (new Customer())->find($custId), '客户被带真 token 的请求删除');
+        $http->post($base . '/leads/' . $leadId, ['_method' => 'DELETE', 'csrf_token' => $csrf]);
+        assertEquals(false, (bool) (new Lead())->find($leadId), '线索被带真 token 的请求删除');
+        $http->post($base . '/deals/' . $dealId, ['_method' => 'DELETE', 'csrf_token' => $csrf]);
+        assertEquals(false, (bool) (new Deal())->find($dealId), '商机被带真 token 的请求删除');
+        $http->post($base . '/orders/' . $orderId, ['_method' => 'DELETE', 'csrf_token' => $csrf]);
+        assertEquals(false, (bool) (new Order())->find($orderId), '订单被带真 token 的请求删除');
+
+        // logout 同款闸门：伪造/缺失 token 拦下，真 token 登出后受保护页弹回登录页
+        $res = $http->post($base . '/logout', ['csrf_token' => 'forged-token']);
+        assertEquals(419, $res['code'], 'logout 带伪造 token → 419');
+        $res = $http->post($base . '/logout', ['csrf_token' => '']);
+        assertEquals(419, $res['code'], 'logout 不带 token → 419');
+        $http->post($base . '/logout', ['csrf_token' => $csrf]);
+        $visit = $http->get($base . '/customers');
+        assertTrue(str_contains($visit['url'], '/login'), 'logout 成功后受保护页弹回登录页');
+    });
+}
+
 runCase();

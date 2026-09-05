@@ -250,6 +250,7 @@ class DealController extends Controller
     public function destroy(string $id): void
     {
         $this->requireAuth();
+        $this->verifyCsrf();
 
         $dealModel = $this->model('Deal');
         $deal = $dealModel->find((int) $id);

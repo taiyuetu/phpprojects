@@ -139,6 +139,7 @@ class AuthController extends Controller
 
     public function logout(): void
     {
+        $this->verifyCsrf();
         $_SESSION = [];
         session_destroy();
         header('Location: ' . url('/login'));

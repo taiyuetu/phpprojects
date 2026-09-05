@@ -318,6 +318,31 @@ function test_picker_markup_is_input_on_top_of_select(): void
     assertContains('历史手填：', $js, '选择框 JS 负责把历史行渲染成一条不可误选的 option');
 }
 
+/** data-legacy 属性里的 JSON 必须整体转义：历史行名称带引号/尖括号时不能打出属性外 */
+function test_legacy_json_in_picker_attribute_is_entity_escaped(): void
+{
+    // 攻击载荷：单引号关掉 data-legacy 后注入一个 <img>（存储型 XSS 现场）
+    $payload = "A'><img src=x onerror=alert(1)>";
+    $legacy = ['product_name' => $payload, 'sku' => '', 'unit' => '件', 'unit_price' => '3'];
+    $html = renderPickerPartial('', $legacy);
+
+    assertContains('data-legacy=', $html, '历史行数据仍在属性里');
+    assertTrue(!str_contains($html, "'><img"), "载荷的关属性+开标签序列不得出现（原始载荷：{$payload}）");
+    assertTrue(str_contains($html, '&#039;'), "单引号必须转成实体（而不是留在属性值里）");
+    assertTrue(str_contains($html, '&lt;img'), '< 必须被转义成实体');
+
+    // 反向验证：浏览器解析属性时会先做实体解码，解码后必须仍是同一份合法 JSON，
+    // JSON.parse 才拿得到原名（这是 dataset.legacy 的读取路径，转义不能破坏它）
+    if (preg_match("/data-legacy='([^']*)'/", $html, $m)) {
+        $decoded = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
+        $parsed = json_decode($decoded, true);
+        assertTrue(is_array($parsed) && ($parsed['product_name'] ?? '') === $payload,
+            '实体解码后仍是原样 JSON，JSON.parse 不受影响');
+    } else {
+        throw new RuntimeException('data-legacy attribute missing');
+    }
+}
+
 function renderPickerJs(): string
 {
     ob_start();

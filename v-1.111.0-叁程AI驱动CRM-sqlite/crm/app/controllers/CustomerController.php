@@ -125,6 +125,7 @@ class CustomerController extends Controller
     public function destroy(string $id): void
     {
         $this->requireAuth();
+        $this->verifyCsrf();
 
         $customerId = (int) $id;
         $customerModel = $this->model('Customer');
