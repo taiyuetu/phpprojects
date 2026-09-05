@@ -69,8 +69,9 @@
 </div>
 
 <?php
-$baseUrl = url('/customers?page=') . ($search ? '&q=' . urlencode($search) : '');
-// Clean up: if no search, just /customers?page=
-if (!$search) $baseUrl = url('/customers?page=');
+// 分页组件把页码直接拼在 $baseUrl 末尾，所以 q 必须放在 page= 之前
+$baseUrl = $search !== ''
+    ? url('/customers?q=' . urlencode($search) . '&page=')
+    : url('/customers?page=');
 include APP_PATH . '/views/partials/_pagination.php';
 ?>

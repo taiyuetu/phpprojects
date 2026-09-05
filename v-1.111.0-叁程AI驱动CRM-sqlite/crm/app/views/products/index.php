@@ -6,9 +6,20 @@
  * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
  */
 ?>
+<?php
+$filterQs = http_build_query(array_filter(['q' => $q, 'status' => $status, 'category' => $category], static fn($v) => $v !== ''));
+$filterQsUrl = $filterQs ? '?' . $filterQs : '';
+?>
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h3 class="mb-0"><i class="bi bi-box-seam me-2"></i>商品库</h3>
-    <a href="<?= url('/products/create') ?>" class="btn btn-primary"><i class="bi bi-plus-lg"></i> 新增商品</a>
+    <div class="d-flex gap-2 align-items-center">
+        <a href="<?= url('/products/export' . $filterQsUrl) ?>" class="btn btn-outline-secondary"
+           title="按当前筛选条件导出 CSV，Excel 可直接打开"><i class="bi bi-download"></i> 导出 CSV</a>
+        <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#productImportModal">
+            <i class="bi bi-upload"></i> 导入 CSV
+        </button>
+        <a href="<?= url('/products/create') ?>" class="btn btn-primary"><i class="bi bi-plus-lg"></i> 新增商品</a>
+    </div>
 </div>
 
 <?php if ($unlinked > 0): ?>
@@ -115,7 +126,32 @@
 </div>
 
 <?php
-$qs = http_build_query(array_filter(['q' => $q, 'status' => $status, 'category' => $category], static fn($v) => $v !== ''));
-$baseUrl = url('/products?page=') . ($qs ? '&' . $qs : '');
+// 分页组件把页码直接拼在 $baseUrl 末尾，所以筛选参数要放在 page= 之前
+$baseUrl = url('/products?' . ($filterQs ? $filterQs . '&' : '') . 'page=');
 include APP_PATH . '/views/partials/_pagination.php';
 ?>
+
+<!-- 导入 CSV 弹窗 -->
+<div class="modal fade" id="productImportModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="POST" action="<?= url('/products/import') ?>" enctype="multipart/form-data" class="modal-content">
+            <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-upload me-1"></i>导入商品 CSV</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="file" name="csv_file" class="form-control" accept=".csv,text/csv" required>
+                <div class="form-text mt-2">
+                    表头支持中文或英文，列名：名称*、SKU、分类、品牌、规格、单位、单价*、参考价、状态、备注。
+                    SKU 相同或名称唯一命中 → <strong>更新</strong>该商品（只改文件里有的列）；都没有 → 新建（归属当前账号）。
+                    同一份文件再导一遍不会产生重复。最多 2000 行 / 2MB。
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="submit" class="btn btn-primary"><i class="bi bi-upload"></i> 开始导入</button>
+            </div>
+        </form>
+    </div>
+</div>

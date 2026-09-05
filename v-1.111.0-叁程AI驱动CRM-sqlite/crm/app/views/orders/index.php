@@ -56,18 +56,44 @@
     </div>
 </div>
 
-<!-- 状态筛选 -->
-<div class="mb-3">
+<?php
+// 筛选链接/分页链接统一携带 status + q，避免搜索状态下切页/切状态丢关键词
+$orderFilter = function (string $value) use ($status, $search): string {
+    $p = [];
+    if ($value !== '') { $p['status'] = $value; }
+    if ($search !== '') { $p['q'] = $search; }
+    return $p ? '?' . http_build_query($p) : '';
+};
+$orderPage = function (int $n) use ($status, $search): string {
+    $p = [];
+    if ($status !== '') { $p['status'] = $status; }
+    if ($search !== '') { $p['q'] = $search; }
+    $p['page'] = $n;
+    return '?' . http_build_query($p);
+};
+?>
+
+<!-- 状态筛选 + 关键词搜索 -->
+<div class="mb-3 d-flex flex-wrap gap-2 justify-content-between align-items-center">
     <div class="btn-group btn-group-sm" role="group">
-        <a href="<?= url('/orders') ?>" class="btn btn-outline-secondary <?= $status === '' ? 'active' : '' ?>">
+        <a href="<?= url('/orders' . $orderFilter('')) ?>" class="btn btn-outline-secondary <?= $status === '' ? 'active' : '' ?>">
             全部 <span class="badge bg-secondary ms-1"><?= $this->model('Order')->countOrders() ?></span>
         </a>
         <?php foreach (Order::statusOptions() as $val => $label): ?>
-            <a href="<?= url('/orders?status=' . $val) ?>" class="btn btn-outline-secondary <?= $status === $val ? 'active' : '' ?>">
+            <a href="<?= url('/orders' . $orderFilter($val)) ?>" class="btn btn-outline-secondary <?= $status === $val ? 'active' : '' ?>">
                 <?= e($label) ?> <span class="badge bg-secondary ms-1"><?= $this->model('Order')->countByStatus($val) ?></span>
             </a>
         <?php endforeach; ?>
     </div>
+    <form method="GET" action="<?= url('/orders') ?>" class="d-flex gap-2">
+        <?php if ($status !== ''): ?><input type="hidden" name="status" value="<?= e($status) ?>"><?php endif; ?>
+        <input type="text" name="q" class="form-control form-control-sm" style="max-width:240px"
+               placeholder="搜索单号、标题、客户、商机…" value="<?= e($search) ?>">
+        <button class="btn btn-sm btn-outline-secondary" type="submit">搜索</button>
+        <?php if ($search !== ''): ?>
+            <a href="<?= url('/orders') ?>" class="btn btn-sm btn-link">清除</a>
+        <?php endif; ?>
+    </form>
 </div>
 
 <!-- 订单列表 -->
@@ -162,15 +188,15 @@
     <nav class="mt-3">
         <ul class="pagination pagination-sm justify-content-center">
             <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
-                <a class="page-link" href="<?= url('/orders?status=' . $status . '&page=' . ($page - 1)) ?>">上一页</a>
+                <a class="page-link" href="<?= url('/orders' . $orderPage($page - 1)) ?>">上一页</a>
             </li>
             <?php for ($i = 1; $i <= $totalPages; $i++): ?>
                 <li class="page-item <?= $i === $page ? 'active' : '' ?>">
-                    <a class="page-link" href="<?= url('/orders?status=' . $status . '&page=' . $i) ?>"><?= $i ?></a>
+                    <a class="page-link" href="<?= url('/orders' . $orderPage($i)) ?>"><?= $i ?></a>
                 </li>
             <?php endfor; ?>
             <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
-                <a class="page-link" href="<?= url('/orders?status=' . $status . '&page=' . ($page + 1)) ?>">下一页</a>
+                <a class="page-link" href="<?= url('/orders' . $orderPage($page + 1)) ?>">下一页</a>
             </li>
         </ul>
     </nav>

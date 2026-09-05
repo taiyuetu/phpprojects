@@ -10,7 +10,8 @@ class DealController extends Controller
     {
         $this->requireAuth();
 
-        $deals = $this->model('Deal')->allWithCustomer();
+        $search = trim($_GET['q'] ?? '');
+        $deals = $this->model('Deal')->allWithCustomer($search);
 
         // Group by stage for a simple kanban-style board.
         // 丢单(closed_lost)商机会自动归档，不占用看板列。
@@ -22,7 +23,7 @@ class DealController extends Controller
             $stages[$deal['stage']][] = $deal;
         }
 
-        $this->view('deals/index', ['stages' => $stages]);
+        $this->view('deals/index', ['stages' => $stages, 'search' => $search]);
     }
 
     public function create(): void
@@ -325,9 +326,10 @@ class DealController extends Controller
     {
         $this->requireAuth();
 
-        $deals = $this->model('Deal')->allArchived();
+        $search = trim($_GET['q'] ?? '');
+        $deals = $this->model('Deal')->allArchived($search);
 
-        $this->view('deals/archived', ['deals' => $deals]);
+        $this->view('deals/archived', ['deals' => $deals, 'search' => $search]);
     }
 
     /** 取消归档 —— 丢单商机恢复后回到"进行中"列继续跟进 */
@@ -452,24 +454,7 @@ class DealController extends Controller
 
     private function validate(array $input): array
     {
-        $validStages = ['open', 'proposal', 'negotiation', 'closed_won', 'closed_lost'];
-
-        $data = [
-            'title'       => trim($input['title'] ?? ''),
-            'customer_id' => (int) ($input['customer_id'] ?? 0),
-            'value'       => is_numeric($input['value'] ?? null) ? (float) $input['value'] : 0,
-            'stage'       => in_array($input['stage'] ?? '', $validStages, true) ? $input['stage'] : 'open',
-            'close_date'  => !empty($input['close_date']) ? $input['close_date'] : null,
-        ];
-
-        $errors = [];
-        if ($data['title'] === '') {
-            $errors[] = '商机名称不能为空。';
-        }
-        if ($data['customer_id'] <= 0) {
-            $errors[] = '请选择一个客户。';
-        }
-
-        return [$data, $errors];
+        // 规则白名单在 Deal::$fields（见 core/Fields.php），控制器只做委托
+        return (new Deal())->sanitizeInput($input);
     }
 }

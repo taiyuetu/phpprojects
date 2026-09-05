@@ -5,6 +5,8 @@
 $l = $old ?? $lead ?? [];
 ?>
 <div class="row g-3 mb-3">
+    <?php $fieldsOwner = new Lead(); $values = $l ?? []; ?>
+    <?php include APP_PATH . '/views/partials/_fields_auto.php'; ?>
     <div class="col-md-12">
         <label class="form-label">线索标题 *</label>
         <input type="text" name="title" class="form-control" value="<?= e($l['title'] ?? '') ?>" required>

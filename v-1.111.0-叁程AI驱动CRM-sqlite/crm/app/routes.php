@@ -41,9 +41,11 @@ $router->post('/leads/{id}/reactivate', 'LeadController@reactivate');
 
 // ---- Products (商品库 / 主数据) ----
 $router->get('/products', 'ProductController@index');
+$router->get('/products/export', 'ProductController@export');
 $router->get('/products/lookup', 'ProductController@lookup');
 $router->get('/products/create', 'ProductController@create');
 $router->post('/products', 'ProductController@store');
+$router->post('/products/import', 'ProductController@import');
 $router->post('/products/import-items', 'ProductController@importItems');
 $router->get('/products/{id}', 'ProductController@show');
 $router->get('/products/{id}/edit', 'ProductController@edit');

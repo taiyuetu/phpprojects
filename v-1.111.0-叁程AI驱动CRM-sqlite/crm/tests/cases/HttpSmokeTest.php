@@ -136,6 +136,12 @@ function test_all_main_pages_respond_200(): void
             // the column assertions below.
             '/leads?status=new', '/leads?status=contacted', '/leads?status=qualified',
             '/leads?status=lost',
+            // 带关键词搜索的列表页：搜索态视图分支（含清除按钮、翻页链接拼接）必须也能 200
+            '/customers?q=xyz', '/leads?q=xyz', '/leads?status=new&q=xyz',
+            '/orders?q=xyz', '/orders?status=shipped&q=xyz',
+            '/deals?q=xyz', '/deals/archived?q=xyz',
+            // 商品 CSV 导出：真下载（BOM+表头），必须 200 且不泄露 PHP 源
+            '/products/export',
         ];
         foreach ($pages as $page) {
             $res = $http->get($base . $page);

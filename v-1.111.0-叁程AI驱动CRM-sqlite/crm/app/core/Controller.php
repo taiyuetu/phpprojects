@@ -74,6 +74,38 @@ abstract class Controller
         exit;
     }
 
+    /**
+     * 输出一个 UTF-8 CSV 下载（带 BOM：Excel 打开中文不乱码）。
+     *
+     * @param array<string,string> $columns 字段 => 表头（顺序即列序）
+     * @param array<int,array<string,mixed>> $rows  行，键与 $columns 对应
+     */
+    protected function sendCsv(string $filename, array $columns, array $rows): void
+    {
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+
+        $cell = static function ($v): string {
+            $s = (string) $v;
+            // 含逗号/引号/换行才加引号，双写引号转义
+            return strpbrk($s, ",\"\r\n") !== false ? '"' . str_replace('"', '""', $s) . '"' : $s;
+        };
+        $line = static function (array $fields) use ($columns, $cell): string {
+            $cells = [];
+            foreach (array_keys($columns) as $key) {
+                $cells[] = $cell($fields[$key] ?? '');
+            }
+            return implode(',', $cells) . "\r\n";
+        };
+
+        echo "\xEF\xBB\xBF";                                       // UTF-8 BOM
+        echo $line(array_combine(array_keys($columns), array_values($columns)));  // 表头
+        foreach ($rows as $row) {
+            echo $line($row);
+        }
+        exit;
+    }
+
     /** Set a one-time flash message shown on the next page load. */
     protected function setFlash(string $key, string $message): void
     {

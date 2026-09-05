@@ -11,15 +11,55 @@ class Lead extends Model
 
     protected string $table = 'leads';
 
-    /** All leads, newest first, optional status filter. */
-    public function allLeads(string $status = '', int $page = 1, int $perPage = 15): array
+    /**
+     * 字段语义注册表（稀疏）：结构看 schema.sql，这里只补语义。
+     * searchable 列与改动前 $searchable 的清单一致 → 搜索行为不变。
+     */
+    protected static array $fields = [
+        'title'       => ['label' => '线索标题', 'type' => 'string', 'searchable' => true,
+                          'required' => true, 'requiredMsg' => '线索标题不能为空。'],
+        'company'     => ['label' => '公司', 'searchable' => true],
+        'contact_name'    => ['label' => '联系人', 'searchable' => true],
+        'contact_email'   => ['label' => '联系邮箱', 'type' => 'email', 'searchable' => true],
+        'lead_time'   => ['label' => '线索时间', 'type' => 'datetime'],
+        'whatsapp'    => ['label' => 'WhatsApp', 'searchable' => true],
+        'phone'       => ['label' => '电话', 'searchable' => true],
+        'facebook'    => ['label' => 'Facebook 主页'],
+        'tiktok'      => ['label' => 'TikTok 频道'],
+        'website'     => ['label' => '官方网站'],
+        'source'      => ['label' => '来源', 'searchable' => true],
+        'source_country' => ['label' => '来源国家', 'searchable' => true],
+        'source_city'    => ['label' => '来源城市', 'searchable' => true],
+        'address'     => ['label' => '地址'],
+        'status'      => ['label' => '状态', 'type' => 'enum', 'default' => 'new'],
+        'lost_reason' => ['label' => '流失原因', 'type' => 'enum', 'writable' => false],
+        'value'       => ['label' => '预估金额', 'type' => 'number', 'default' => '0'],
+        'first_purchase_from_china' => ['label' => '是否首次从中国采购', 'type' => 'bool'],
+        'has_import_capability'     => ['label' => '是否有进口能力', 'type' => 'bool'],
+        'notes'       => ['label' => '备注', 'type' => 'text', 'searchable' => true],
+    ];
+
+    /**
+     * All leads, newest first. $status = 状态精确筛选，$search = 跨列关键词。
+     * （$search 放在参数末位：老调用 allLeads($status,$page,$perPage) 不受影响）
+     */
+    public function allLeads(string $status = '', int $page = 1, int $perPage = 15, string $search = ''): array
     {
         $sql = "SELECT l.*, u.name AS owner_name FROM leads l LEFT JOIN users u ON u.id = l.owner_id";
         $params = [];
 
+        $where = [];
         if ($status !== '') {
-            $sql .= " WHERE l.status = :status";
+            $where[] = 'l.status = :status';
             $params[':status'] = $status;
+        }
+        if ($search !== '') {
+            [$bits, $sparams] = $this->searchWhere($search, 'l');
+            $where[] = $bits;
+            $params = array_merge($params, $sparams);
+        }
+        if ($where) {
+            $sql .= ' WHERE ' . implode(' AND ', $where);
         }
 
         $sql .= " ORDER BY l.created_at DESC LIMIT :limit OFFSET :offset";
@@ -33,15 +73,24 @@ class Lead extends Model
         return $stmt->resultSet();
     }
 
-    /** Count leads matching optional status filter. */
-    public function countLeads(string $status = ''): int
+    /** Count leads matching optional status filter and/or keyword. */
+    public function countLeads(string $status = '', string $search = ''): int
     {
         $sql = "SELECT COUNT(*) AS total FROM leads l";
         $params = [];
 
+        $where = [];
         if ($status !== '') {
-            $sql .= " WHERE l.status = :status";
+            $where[] = 'l.status = :status';
             $params[':status'] = $status;
+        }
+        if ($search !== '') {
+            [$bits, $sparams] = $this->searchWhere($search, 'l');
+            $where[] = $bits;
+            $params = array_merge($params, $sparams);
+        }
+        if ($where) {
+            $sql .= ' WHERE ' . implode(' AND ', $where);
         }
 
         $stmt = $this->db()->query($sql);

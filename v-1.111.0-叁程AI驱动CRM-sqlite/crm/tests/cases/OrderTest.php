@@ -97,6 +97,43 @@ function test_order_queries_and_status_helpers(): void
     assertEquals(0.0, $o->totalAmount('cancelled'), 'no cancelled orders yet');
 }
 
+/** 订单列表关键词搜索：单号/标题/客户名，可与状态筛选叠加 */
+function test_order_keyword_search(): void
+{
+    $custA = seedOrderCustomer();
+    $custB = seedOrderCustomer();
+    $a = new Order();
+
+    $numA = $a->generateOrderNumber();
+    $a->create([
+        'order_number' => $numA, 'customer_id' => (int) $custA['id'],
+        'title' => 'Bearing export order', 'status' => 'pending', 'owner_id' => 1,
+    ]);
+    $numB = $a->generateOrderNumber();
+    $a->create([
+        'order_number' => $numB, 'customer_id' => (int) $custB['id'],
+        'title' => 'Tooling set order', 'status' => 'shipped', 'owner_id' => 1,
+    ]);
+
+    // 按订单号整号搜（单号唯一，只命中自身）
+    assertEquals(1, count($a->allOrders('', 1, 15, $numA)), '按订单号搜索');
+    assertEquals($numA, $a->allOrders('', 1, 15, $numA)[0]['order_number'], '命中正确订单');
+
+    // 按标题关键词
+    assertEquals(1, count($a->allOrders('', 1, 15, 'Bearing')), '按标题搜索');
+    assertEquals(1, (int) $a->countOrders('', 'Bearing'), 'countOrders 与列表同一份 WHERE');
+
+    // 按 JOIN 进来的客户名搜索
+    $byCust = $a->allOrders('', 1, 15, $custA['name']);
+    assertEquals(1, count($byCust), '按客户名搜索');
+    assertEquals((int) $custA['id'], (int) $byCust[0]['customer_id'], '命中该客户的订单');
+    assertEquals(1, (int) $a->countOrders('', $custA['name']), 'countOrders 关键词带 JOIN 计数一致');
+
+    // 状态筛选 + 关键词叠加
+    assertEquals(1, count($a->allOrders('shipped', 1, 15, 'Tooling')), '状态 + 关键词生效');
+    assertEquals(0, count($a->allOrders('pending', 1, 15, 'Tooling')), '状态不匹配则 0 条');
+}
+
 /** 生成器必须跳过已占用的编号；numberInUse 能排除自身（改自己订单号时不算撞车） */
 function test_generate_order_number_skips_taken_and_number_in_use(): void
 {

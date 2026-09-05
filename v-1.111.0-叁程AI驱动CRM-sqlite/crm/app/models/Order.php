@@ -8,8 +8,41 @@ class Order extends Model
 {
     protected string $table = 'orders';
 
-    /** All orders with customer and deal info, newest first, optional status filter. */
-    public function allOrders(string $status = '', int $page = 1, int $perPage = 15): array
+    /**
+     * 字段语义注册表（稀疏）：结构看 schema.sql，这里补语义。
+     * 金额 amount 以明细合计为准，表单里的 hidden 只做兜底；状态枚举来自 DB CHECK。
+     */
+    protected static array $fields = [
+        'order_number'    => ['label' => '订单编号', 'type' => 'string',
+                              'required' => true, 'requiredMsg' => '订单编号不能为空。'],
+        'deal_id'         => ['label' => '关联商机', 'type' => 'int'],
+        'customer_id'     => ['label' => '客户', 'type' => 'int',
+                              'required' => true, 'requiredMsg' => '请选择一个客户。'],
+        'title'           => ['label' => '订单标题', 'type' => 'string', 'searchable' => true,
+                              'required' => true, 'requiredMsg' => '订单标题不能为空。'],
+        'amount'          => ['label' => '金额', 'type' => 'number', 'default' => '0'],
+        'status'          => ['label' => '状态', 'type' => 'enum', 'default' => 'pending'],
+        'payment_status'  => ['label' => '付款状态', 'type' => 'enum', 'default' => 'unpaid'],
+        'order_date'      => ['label' => '下单日期', 'type' => 'date', 'defaultToday' => true],
+        'delivery_date'   => ['label' => '交货日期', 'type' => 'date'],
+        'shipping_address' => ['label' => '收货地址', 'type' => 'text'],
+        'notes'           => ['label' => '备注', 'type' => 'text', 'searchable' => true],
+    ];
+
+    /**
+     * 订单列表关键词搜索覆盖的列。c./d./ 带前缀的条目搜索的是 JOIN 进来的
+     * 客户与商机，所以 countOrders() 里也要带着 JOIN（见下）。
+     */
+    protected array $searchable = [
+        'order_number', 'title', 'shipping_address', 'notes',
+        'c.name', 'c.company', 'd.title',
+    ];
+
+    /**
+     * All orders with customer and deal info, newest first.
+     * $status = 状态精确筛选，$search = 跨列关键词（$search 在参数末位，老调用不受影响）。
+     */
+    public function allOrders(string $status = '', int $page = 1, int $perPage = 15, string $search = ''): array
     {
         $sql = "SELECT o.*, c.name AS customer_name, c.company AS customer_company,
                        d.title AS deal_title, u.name AS owner_name
@@ -19,9 +52,18 @@ class Order extends Model
                 LEFT JOIN users u ON u.id = o.owner_id";
         $params = [];
 
+        $where = [];
         if ($status !== '') {
-            $sql .= " WHERE o.status = :status";
+            $where[] = 'o.status = :status';
             $params[':status'] = $status;
+        }
+        if ($search !== '') {
+            [$bits, $sparams] = $this->searchWhere($search, 'o');
+            $where[] = $bits;
+            $params = array_merge($params, $sparams);
+        }
+        if ($where) {
+            $sql .= ' WHERE ' . implode(' AND ', $where);
         }
 
         $sql .= " ORDER BY o.created_at DESC LIMIT :limit OFFSET :offset";
@@ -35,15 +77,29 @@ class Order extends Model
         return $stmt->resultSet();
     }
 
-    /** Count orders matching optional status filter. */
-    public function countOrders(string $status = ''): int
+    /**
+     * Count orders matching optional status filter and/or keyword.
+     * 搜索列含 c.name / d.title，所以关键词模式必须 JOIN 客户/商机表（id 唯一，不放大行数）。
+     */
+    public function countOrders(string $status = '', string $search = ''): int
     {
-        $sql = "SELECT COUNT(*) AS total FROM orders o";
+        $sql = "SELECT COUNT(*) AS total FROM orders o
+                LEFT JOIN customers c ON c.id = o.customer_id
+                LEFT JOIN deals d ON d.id = o.deal_id";
         $params = [];
 
+        $where = [];
         if ($status !== '') {
-            $sql .= " WHERE o.status = :status";
+            $where[] = 'o.status = :status';
             $params[':status'] = $status;
+        }
+        if ($search !== '') {
+            [$bits, $sparams] = $this->searchWhere($search, 'o');
+            $where[] = $bits;
+            $params = array_merge($params, $sparams);
+        }
+        if ($where) {
+            $sql .= ' WHERE ' . implode(' AND ', $where);
         }
 
         $stmt = $this->db()->query($sql);

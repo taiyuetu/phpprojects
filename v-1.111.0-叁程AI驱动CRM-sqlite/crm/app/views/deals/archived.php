@@ -11,6 +11,15 @@
     <a href="<?= url('/deals') ?>" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> 返回看板</a>
 </div>
 
+<form method="GET" action="<?= url('/deals/archived') ?>" class="d-flex gap-2 mb-3" style="max-width:440px">
+    <input type="text" name="q" class="form-control form-control-sm"
+           placeholder="搜索商机标题、客户名称…" value="<?= e($search) ?>">
+    <button class="btn btn-sm btn-outline-secondary" type="submit">搜索</button>
+    <?php if ($search !== ''): ?>
+        <a href="<?= url('/deals/archived') ?>" class="btn btn-sm btn-link">清除</a>
+    <?php endif; ?>
+</form>
+
 <?php if (empty($deals)): ?>
     <div class="card card-table p-5 text-center text-muted">
         <i class="bi bi-archive fs-1 d-block mb-2"></i>

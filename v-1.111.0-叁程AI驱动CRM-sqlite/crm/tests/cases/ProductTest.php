@@ -361,4 +361,151 @@ function renderPickerPartial(string $selected, ?array $legacy = null): string
     return (string) ob_get_clean();
 }
 
+// ------------------------------------------------------------ CSV 导入/导出
+
+/** 临时 CSV 文件（测试进程自带独立库，文件用完即删） */
+function writeTempCsv(string $body): string
+{
+    $path = sys_get_temp_dir() . '/crm_products_' . bin2hex(random_bytes(4)) . '.csv';
+    file_put_contents($path, $body);
+    return $path;
+}
+
+/** 按 Product::csvColumns() 的列序把行拼成 CSV 正文（与导出端同一套转义） */
+function productCsvBody(array $rows): string
+{
+    $cols = Product::csvColumns();
+    $cell = static function ($v): string {
+        $s = (string) $v;
+        return strpbrk($s, ",\"\r\n") !== false ? '"' . str_replace('"', '""', $s) . '"' : $s;
+    };
+    $lines = [implode(',', array_values($cols))];
+    foreach ($rows as $row) {
+        $cells = [];
+        foreach (array_keys($cols) as $k) {
+            $cells[] = $cell($row[$k] ?? '');
+        }
+        $lines[] = implode(',', $cells);
+    }
+    return implode("\r\n", $lines) . "\r\n";
+}
+
+/** 导出行是可读文本：编号回填、金额去尾零、状态中文、键与 csvColumns 对齐 */
+function test_csv_export_shape(): void
+{
+    prodAdmin();
+    $a = mkProduct('螺丝 M4, 不锈钢', 'SCR-M4', 1.5, '个');
+    (new Product())->update($a['id'], ['cost' => 0.8]);
+    (new Product())->create(['name' => '停用的无码商品', 'price' => 2, 'status' => 'inactive', 'unit' => '件', 'owner_id' => 1]);
+
+    assertEquals('1.5', Product::csvNumber(1.5), '小数不补零');
+    assertEquals('0', Product::csvNumber(0.0), '整数不带小数点');
+    assertEquals('8', Product::csvNumber(8), '整数直接输出');
+    assertEquals('2.5', Product::csvNumber(2.50), '去尾零');
+
+    $rows = (new Product())->exportRows('SCR-M4');
+    assertEquals(1, count($rows), '按 SKU 过滤导出只命中一条');
+    assertEquals(array_keys(Product::csvColumns()), array_keys($rows[0]), '导出键与列定义对齐');
+    assertEquals('螺丝 M4, 不锈钢', $rows[0]['name'], '名称原样');
+    assertEquals('1.5', $rows[0]['price'], '单价去尾零');
+    assertEquals('0.8', $rows[0]['cost'], '参考价去尾零');
+    assertEquals('在售', $rows[0]['status'], '状态给中文');
+    assertContains('PROD-', $rows[0]['public_code'], '编号已回填');
+
+    $inactive = (new Product())->exportRows('停用的无码商品');
+    assertEquals('停用', $inactive[0]['status'], '停用也要给中文标签');
+}
+
+/** 同一份导出文件可导回：SKU/唯一名称命中更新，新行新建，坏行跳过；再导一遍不重复 */
+function test_csv_import_upsert_and_roundtrip(): void
+{
+    $user = prodAdmin();
+    mkProduct('已有商品', 'KEEP-1', 10, '个');
+    $body = productCsvBody([
+        ['name' => '已有商品', 'sku' => 'KEEP-1', 'category' => '轴承', 'brand' => '', 'spec' => '',
+         'unit' => '个', 'price' => '12.5', 'cost' => '', 'status' => '在售', 'notes' => '改价了'],
+        ['name' => '全新导入商品', 'sku' => 'NEW-1', 'category' => '', 'brand' => '', 'spec' => 'M6',
+         'unit' => '套', 'price' => '3', 'cost' => '1', 'status' => 'active', 'notes' => ''],
+        ['name' => '缺单价的坏行', 'sku' => 'BAD-1', 'category' => '', 'brand' => '', 'spec' => '',
+         'unit' => '件', 'price' => '', 'cost' => '', 'status' => '', 'notes' => ''],
+    ]);
+    $path = writeTempCsv($body);
+    $p = new Product();
+    $stat = $p->importCsvFile($path, $user);
+
+    assertEquals(1, $stat['created'], '新建 1 条');
+    assertEquals(1, $stat['updated'], 'SKU 命中更新 1 条');
+    assertEquals(1, $stat['skipped'], '缺单价的坏行整行跳过');
+    assertTrue($stat['errors'] !== [], '跳过必须带原因');
+    assertContains('单价', $stat['errors'][0], '原因要说清楚缺什么');
+
+    $old = $p->resolve('KEEP-1');
+    assertEquals(12.5, (float) $old['price'], '更新生效：价格');
+    assertEquals('轴承', (string) $old['category'], '更新生效：分类');
+    assertEquals('改价了', (string) $old['notes'], '更新生效：备注');
+    assertEquals(1, (int) $old['owner_id'], '归属人不被动');
+
+    $fresh = $p->resolve('NEW-1');
+    assertEquals('全新导入商品', (string) $fresh['name'], '新建落库');
+    assertEquals('套', (string) $fresh['unit'], '新建带单位');
+    assertEquals('M6', (string) $fresh['spec']);
+
+    // 幂等：同一份文件导第二遍 = 全部更新、零新建
+    $again = $p->importCsvFile($path, $user);
+    assertEquals(0, $again['created'], '第二遍新建为 0');
+    assertEquals(2, $again['updated'], '第二遍按身份全部更新');
+    @unlink($path);
+}
+
+/** 名称撞到多个商品时绝不猜：整行跳过并提示补 SKU */
+function test_csv_import_name_ambiguity_is_safe(): void
+{
+    $user = prodAdmin();
+    mkProduct('重名商品', 'DUP-A', 1);
+    mkProduct('重名商品', 'DUP-B', 2);
+    $path = writeTempCsv("名称,SKU,单价\n重名商品,,9\n");
+    $stat = (new Product())->importCsvFile($path, $user);
+    assertEquals(0, $stat['created'], '歧义行不新建');
+    assertEquals(0, $stat['updated'], '歧义行不更新');
+    assertEquals(1, $stat['skipped'], '歧义行整行跳过');
+    assertContains('多个商品', $stat['errors'][0], '原因要说清是撞名');
+    @unlink($path);
+}
+
+/** 编码容错（BOM/CRLF/GBK）与表头错误要给出人能懂的信息 */
+function test_csv_import_encoding_and_header_errors(): void
+{
+    $user = prodAdmin();
+    $p = new Product();
+
+    // 带 BOM + CRLF 的 UTF-8 文件能正常导入
+    $path = writeTempCsv("\xEF\xBB\xBF名称,SKU,单价,状态\r\nBOM商品,BOM-1,5,在售\r\n");
+    $stat = $p->importCsvFile($path, $user);
+    assertEquals(1, $stat['created'], '带 BOM 的 UTF-8 能导入');
+    assertEquals('BOM商品', (string) $p->resolve('BOM-1')['name'], '中文名入库');
+    @unlink($path);
+
+    // GBK（Excel 中文另存的常见编码）在 iconv 可用时也要能导
+    if (function_exists('iconv')) {
+        $gbk = iconv('UTF-8', 'GB18030', "名称,单价\nGBK商品,7\n");
+        $g = $p->importCsvFile(writeTempCsv((string) $gbk), $user);
+        assertEquals(1, $g['created'], 'GBK 文件能转换后导入');
+        assertEquals('GBK商品', (string) $p->resolve('GBK商品')['name'], 'GBK 中文名不乱码');
+    }
+
+    // 表头找不到「名称」列 → 整体拒绝
+    $badPath = writeTempCsv("SKU,单价\nA-9,1\n");
+    $threw = false;
+    $msg = '';
+    try {
+        $p->importCsvFile($badPath, $user);
+    } catch (Throwable $e) {
+        $threw = true;
+        $msg = $e->getMessage();
+    }
+    assertTrue($threw, '表头缺「名称」必须抛错，而不是静默建垃圾');
+    assertContains('名称', $msg);
+    @unlink($badPath);
+}
+
 runCase();

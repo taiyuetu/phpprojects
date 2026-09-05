@@ -123,9 +123,11 @@ class Ai extends Model
         }
         // 注意：这里绝不能走 AppMap —— AppMap::all() 会调 Ai::tools() 生成工具表，
         // 而 tools() 又调本方法，形成无限递归（实测吃到 128M 内存上限才崩）。
+        // Fields 只依赖 Schema/各 Model 的静态注册表，同样安全。
         $columns = Schema::columns($table);
         $enums = Schema::enumsFor($table);
         $labels = self::columnLabels();
+        $declared = Fields::declaredFor($table);          // 有注册表的表：中文名/类型以注册表为准
         $skip = array_merge(self::PROTECTED_COLUMNS['*'], self::PROTECTED_COLUMNS[$table] ?? []);
         $out = [];
         foreach ($columns as $col) {
@@ -134,17 +136,40 @@ class Ai extends Model
                 continue;
             }
             $type = isset($enums[$name]) ? 'enum' : self::guessType($name, (string) ($col['type'] ?? ''));
-            $spec = ['label' => $labels[$name] ?? $name, 'type' => $type];
-            if ($type === 'enum') {
-                $spec['options'] = array_map('strval', $enums[$name]);
+            // 已注册表：语义类型优先（number→money、int→int、enum→enum…），datetime 维持原样避免丢时分
+            if (isset($declared[$name]['type'])) {
+                $type = [
+                    'bool' => 'bool', 'int' => 'int', 'number' => 'money', 'money' => 'money',
+                    'email' => 'email', 'phone' => 'phone', 'text' => 'text', 'string' => 'string',
+                    'enum' => 'enum', 'date' => 'date',
+                ][(string) $declared[$name]['type']] ?? $type;
+            }
+            $spec = [
+                'label' => $declared[$name]['label'] ?? ($labels[$name] ?? $name),
+                'type'  => $type,
+            ];
+            if (isset($declared[$name]['options'])) {
+                // 注册表直接给了可选值：按枚举处理
+                $spec['type'] = 'enum';
+                $spec['options'] = array_map('strval', (array) $declared[$name]['options']);
+            }
+            if ($type === 'enum' && isset($enums[$name])) {
+                $spec['options'] = array_map('strval', $enums[$name]);          // DB CHECK 枚举
             }
             // 还有几个列的可选值在 PHP 里（数据库没加 CHECK），一并当枚举处理，
             // 否则“流失原因”会变成自由文本，与页面上的下拉框对不上
             $phpKey = $table . '.' . $name;
             $phpOptions = array_map('strval', (array) (self::phpEnums()[$phpKey] ?? []));
-            if ($phpOptions !== [] && $type !== 'enum') {
+            if ($phpOptions !== [] && empty($spec['options'])) {
                 $spec['type'] = 'enum';
                 $spec['options'] = $phpOptions;
+            }
+            // 都没有时，从模型 fieldEnumOptions 钩子补（如商品单位）
+            if (($spec['type'] ?? '') === 'enum' && empty($spec['options'])) {
+                $modelOptions = Fields::optionsFor($table, $name);
+                if ($modelOptions !== null) {
+                    $spec['options'] = $modelOptions;
+                }
             }
             if ($type === 'string' || $type === 'text') {
                 $spec['max'] = self::maxFor($name, $type);

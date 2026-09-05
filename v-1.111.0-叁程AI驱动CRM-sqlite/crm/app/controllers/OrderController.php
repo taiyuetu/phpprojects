@@ -11,22 +11,24 @@ class OrderController extends Controller
         $this->requireAuth();
 
         $status = trim($_GET['status'] ?? '');
+        $search = trim($_GET['q'] ?? '');
         $page = max(1, (int) ($_GET['page'] ?? 1));
         $perPage = 15;
 
         $orderModel = $this->model('Order');
-        $total = $orderModel->countOrders($status);
+        $total = $orderModel->countOrders($status, $search);
         $totalPages = max(1, (int) ceil($total / $perPage));
         $page = min($page, $totalPages);
 
         $this->view('orders/index', [
-            'orders'      => $orderModel->allOrders($status, $page, $perPage),
+            'orders'      => $orderModel->allOrders($status, $page, $perPage, $search),
             'status'      => $status,
+            'search'      => $search,
             'page'        => $page,
             'totalPages'  => $totalPages,
             'total'       => $total,
             'totalAmount' => $orderModel->totalAmount(),
-                ]);
+        ]);
     }
 
     public function create(): void
@@ -369,34 +371,7 @@ class OrderController extends Controller
 
     private function validate(array $input): array
     {
-        $validStatuses = array_keys(Order::statusOptions());
-        $validPaymentStatuses = array_keys(Order::paymentStatusOptions());
-
-        $data = [
-            'order_number'   => trim($input['order_number'] ?? ''),
-            'deal_id'        => !empty($input['deal_id']) ? (int) $input['deal_id'] : null,
-            'customer_id'    => (int) ($input['customer_id'] ?? 0),
-            'title'          => trim($input['title'] ?? ''),
-            'amount'         => is_numeric($input['amount'] ?? null) ? (float) $input['amount'] : 0,
-            'status'         => in_array($input['status'] ?? '', $validStatuses, true) ? $input['status'] : 'pending',
-            'payment_status' => in_array($input['payment_status'] ?? '', $validPaymentStatuses, true) ? $input['payment_status'] : 'unpaid',
-            'order_date'     => !empty($input['order_date']) ? $input['order_date'] : date('Y-m-d'),
-            'delivery_date'  => !empty($input['delivery_date']) ? $input['delivery_date'] : null,
-            'shipping_address' => trim($input['shipping_address'] ?? '') ?: null,
-            'notes'          => trim($input['notes'] ?? '') ?: null,
-        ];
-
-        $errors = [];
-        if ($data['order_number'] === '') {
-            $errors[] = '订单编号不能为空。';
-        }
-        if ($data['title'] === '') {
-            $errors[] = '订单标题不能为空。';
-        }
-        if ($data['customer_id'] <= 0) {
-            $errors[] = '请选择一个客户。';
-        }
-
-        return [$data, $errors];
+        // 规则白名单在 Order::$fields（见 core/Fields.php），控制器只做委托
+        return (new Order())->sanitizeInput($input);
     }
 }

@@ -61,6 +61,79 @@ abstract class Model
      */
     protected ?string $publicCodePrefix = null;
 
+    /**
+     * 列表关键词搜索扫哪些列（跨列 OR LIKE，见 searchWhere()）。
+     *
+     * 普通场景不在这里声明：改在 static::$fields 里给对应列标 searchable，
+     * searchableColumns() 会自动收集。这个数组只留给“要搜 JOIN 进来的列”这类
+     * 特殊场景做整体覆盖（如 orders/deals 搜客户名：['c.name', 'd.title']）。
+     *
+     * 两者都为空时按表结构自动推断：文本类列剔除主键/编号/时间戳/布尔/金额/枚举。
+     */
+    protected array $searchable = [];
+
+    /**
+     * 字段语义注册表（稀疏）：只写数据库推不出来的部分。
+     *
+     *     键 = 列名；值 = ['label' => 中文名, 'type' => 'email', 'searchable' => true, ...]
+     *
+     * 结构本身仍以 schema.sql / Schema 为权威，这里负责补“中文叫什么、搜不搜、
+     * 表单什么控件、CSV 怎么导出”等语义。引擎见 core/Fields.php。
+     */
+    protected static array $fields = [];
+
+    /** 本模型的字段语义声明（子类覆写 static::$fields） */
+    public function fieldDefs(): array
+    {
+        return static::$fields;
+    }
+
+    /** 静态版字段声明：供没有实例的地方（如 Fields::declaredFor）读取 */
+    public static function fieldDefsStatic(): array
+    {
+        return static::$fields;
+    }
+
+    /** 注册表里标了 form 的列（供 partials/_fields_auto.php 自动渲染进表单） */
+    public function autoFormFields(): array
+    {
+        return Fields::autoFormFields($this->table, static::$fields);
+    }
+
+    /** 本次关键词搜索实际扫的列：$searchable 覆盖 > 注册表 searchable > 自动推断。 */
+    public function searchableColumns(): array
+    {
+        if ($this->searchable !== []) {
+            return $this->searchable;
+        }
+        return Fields::searchableColumns($this->table, static::$fields);
+    }
+
+    /**
+     * 关键词 → 跨列 LIKE 的 (WHERE 片段, 参数)。
+     *
+     * 用户输入里的 '%' / '_' 必须先转义：SQLite 的 LIKE 默认不设 escape 字符，
+     * 一个 % 就是“匹配整表”；所以每一处 LIKE 都要带 ESCAPE '\\'（与 Ai::likeValue()
+     * 同口径）。本方法只生成片段，由调用方并入 WHERE 并合并参数。
+     * 片段自带一对圆括号（(... OR ...)），与 archived/status 等其他条件用 AND
+     * 拼接时不会被 OR 的优先级破坏（回归：归档页曾把未归档行一起搜出来）。
+     *
+     * @return array{0:string, 1:array<string,string>} [WHERE 片段, 参数]
+     */
+    protected function searchWhere(string $search, string $alias = ''): array
+    {
+        $term = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $search) . '%';
+        $bits = [];
+        $params = [];
+        foreach ($this->searchableColumns() as $col) {
+            $expr = str_contains($col, '.') ? $col : ($alias !== '' ? "{$alias}.{$col}" : $col);
+            $key = ':kw_' . count($bits);
+            $bits[] = "{$expr} LIKE {$key} ESCAPE '\\'";
+            $params[$key] = $term;
+        }
+        return ['(' . implode(' OR ', $bits) . ')', $params];
+    }
+
     public function publicCode(int $id): string
     {
         return (($this->publicCodePrefix ?? '') ?: strtoupper(substr($this->table, 0, 3))) . '-' . sprintf('%06d', $id);
@@ -174,6 +247,56 @@ abstract class Model
             $stmt->bind($key, $value);
         }
         return (int) ($stmt->single()['total'] ?? 0);
+    }
+
+    /**
+     * 通用输入清洗/校验：以 static::$fields 为白名单交给 Fields::sanitize()，
+     * 再补上需要查库的唯一性检查。取代各 Controller 手写的 validate()。
+     *
+     * @param array<string,mixed> $ctx selfId（编辑时排除自身）等上下文
+     * @return array{0:array<string,mixed>, 1:array<int,string>} [data, errors]
+     */
+    public function sanitizeInput(array $input, array $ctx = []): array
+    {
+        $ctx += [
+            'selfId'      => 0,
+            'enumOptions' => fn(string $field): ?array => $this->fieldEnumOptions($field),
+        ];
+        [$data, $errors] = Fields::sanitize($this->table, static::$fields, $input, $ctx);
+
+        foreach (static::$fields as $name => $meta) {
+            if (empty($meta['unique'])) {
+                continue;
+            }
+            $v = $data[$name] ?? null;
+            if ($v === null || (is_scalar($v) && (string) $v === '')) {
+                continue;
+            }
+            if ($this->fieldUniqueTaken((string) $name, (string) $v, (int) $ctx['selfId'])) {
+                $labels = Fields::columns($this->table, static::$fields);
+                $label = (string) ($labels[$name]['label'] ?? $name);
+                $errors[] = $label . '「' . (string) $v . '」已被其它商品占用，换个编号或直接留空。';
+            }
+        }
+        return [$data, $errors];
+    }
+
+    /**
+     * 某个字段的值是否已被别的行占用（unique 声明的查库实现）。
+     * 默认放行；商品类目用它做 SKU 唯一性（子类覆写）。
+     */
+    protected function fieldUniqueTaken(string $field, string $value, int $selfId): bool
+    {
+        return false;
+    }
+
+    /**
+     * 注册表外补充的可选值（数据库没写 CHECK、选项在 PHP 里的列，如商品单位）。
+     * 返回 null 表示该字段没有额外可选项。
+     */
+    public function fieldEnumOptions(string $field): ?array
+    {
+        return null;
     }
 
     /** Escape hatch for custom queries within a model. */

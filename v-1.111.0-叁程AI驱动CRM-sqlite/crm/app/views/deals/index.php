@@ -11,6 +11,15 @@
     </div>
 </div>
 
+<form method="GET" action="<?= url('/deals') ?>" class="d-flex gap-2 mb-3" style="max-width:440px">
+    <input type="text" name="q" class="form-control form-control-sm"
+           placeholder="搜索商机标题、客户名称…" value="<?= e($search) ?>">
+    <button class="btn btn-sm btn-outline-secondary" type="submit">搜索</button>
+    <?php if ($search !== ''): ?>
+        <a href="<?= url('/deals') ?>" class="btn btn-sm btn-link">清除</a>
+    <?php endif; ?>
+</form>
+
 <?php
 // 看板列：丢单(closed_lost)商机会自动归档，不占用看板列。
 $columns = [

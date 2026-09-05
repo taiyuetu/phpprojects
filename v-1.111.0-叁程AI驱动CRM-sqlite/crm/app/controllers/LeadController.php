@@ -11,17 +11,19 @@ class LeadController extends Controller
         $this->requireAuth();
 
         $status = trim($_GET['status'] ?? '');
+        $search = trim($_GET['q'] ?? '');
         $page = max(1, (int) ($_GET['page'] ?? 1));
         $perPage = 15;
 
         $leadModel = $this->model('Lead');
-        $total = $leadModel->countLeads($status);
+        $total = $leadModel->countLeads($status, $search);
         $totalPages = max(1, (int) ceil($total / $perPage));
         $page = min($page, $totalPages);
 
         $this->view('leads/index', [
-            'leads'      => $leadModel->allLeads($status, $page, $perPage),
+            'leads'      => $leadModel->allLeads($status, $page, $perPage, $search),
             'status'     => $status,
+            'search'     => $search,
             'page'       => $page,
             'totalPages' => $totalPages,
             'total'      => $total,
@@ -249,34 +251,7 @@ class LeadController extends Controller
 
     private function validate(array $input): array
     {
-        $data = [
-            'title'         => trim($input['title'] ?? ''),
-            'company'       => trim($input['company'] ?? '') ?: null,
-            'contact_name'  => trim($input['contact_name'] ?? '') ?: null,
-            'contact_email' => trim($input['contact_email'] ?? '') ?: null,
-            'lead_time'     => trim($input['lead_time'] ?? '') ?: null,
-            'whatsapp'      => trim($input['whatsapp'] ?? '') ?: null,
-            'phone'         => trim($input['phone'] ?? '') ?: null,
-            'facebook'      => trim($input['facebook'] ?? '') ?: null,
-            'tiktok'        => trim($input['tiktok'] ?? '') ?: null,
-            'website'       => trim($input['website'] ?? '') ?: null,
-            'source_country'=> trim($input['source_country'] ?? '') ?: null,
-            'source_city'   => trim($input['source_city'] ?? '') ?: null,
-            'address'       => trim($input['address'] ?? '') ?: null,
-            'first_purchase_from_china' => isset($input['first_purchase_from_china']) ? 1 : 0,
-            'has_import_capability'     => isset($input['has_import_capability']) ? 1 : 0,
-            'source'        => trim($input['source'] ?? '') ?: null,
-            'status'        => in_array($input['status'] ?? '', ['new', 'contacted', 'qualified', 'lost'], true)
-                ? $input['status'] : 'new',
-            'value'         => is_numeric($input['value'] ?? null) ? (float) $input['value'] : 0,
-            'notes'         => trim($input['notes'] ?? '') ?: null,
-        ];
-
-        $errors = [];
-        if ($data['title'] === '') {
-            $errors[] = '线索标题不能为空。';
-        }
-
-        return [$data, $errors];
+        // 规则白名单在 Lead::$fields（见 core/Fields.php），控制器只做委托
+        return (new Lead())->sanitizeInput($input);
     }
 }

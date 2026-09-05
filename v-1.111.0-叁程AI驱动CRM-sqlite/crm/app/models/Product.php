@@ -20,6 +20,41 @@ class Product extends Model
 
     protected string $table = 'products';
 
+    /**
+     * 字段语义注册表（稀疏）。结构看 schema.sql；这里补 label/type/required/范围/唯一。
+     * max 对文本列是字符上限、对数值列是大小上限；数值上限 100000000 = Ai::MAX_AMOUNT。
+     */
+    protected static array $fields = [
+        'name'        => ['label' => '商品名称', 'type' => 'string', 'searchable' => true,
+                          'required' => true, 'requiredMsg' => '商品名称必填。', 'max' => 150,
+                          'csv' => ['label' => '名称', 'aliases' => ['商品名称', '商品', '产品名称', '品名', 'name']]],
+        'public_code' => ['label' => '编号', 'writable' => false, 'csv' => true],
+        'sku'         => ['label' => 'SKU', 'type' => 'string', 'searchable' => true,
+                          'unique' => true, 'max' => 60, 'csv' => true],
+        'category'    => ['label' => '分类', 'searchable' => true, 'csv' => true],
+        'brand'       => ['label' => '品牌', 'searchable' => true, 'csv' => true],
+        'spec'        => ['label' => '规格', 'searchable' => true, 'csv' => true],
+        'unit'        => ['label' => '单位', 'type' => 'enum', 'default' => '件', 'strict' => true, 'csv' => true],
+        'price'       => ['label' => '单价', 'type' => 'number', 'required' => true,
+                          'requiredMsg' => '单价必须填数字（没有价格就填 0，别留空）。',
+                          'min' => 0, 'max' => 100000000, 'csv' => true],
+        'cost'        => ['label' => '参考价', 'type' => 'number', 'min' => 0, 'max' => 100000000, 'csv' => true],
+        'status'      => ['label' => '状态', 'type' => 'enum', 'default' => 'active', 'csv' => true],
+        'notes'       => ['label' => '备注', 'type' => 'text', 'searchable' => true, 'csv' => true],
+    ];
+
+    /** 单位可选值不在数据库里（订单明细共用同一套，见 OrderItem::unitOptions） */
+    public function fieldEnumOptions(string $field): ?array
+    {
+        return $field === 'unit' ? OrderItem::unitOptions() : null;
+    }
+
+    /** SKU 唯一性的查库实现（selfId 用于“改自己时不算冲突”） */
+    protected function fieldUniqueTaken(string $field, string $value, int $selfId): bool
+    {
+        return $field === 'sku' && $this->skuTaken($value, $selfId);
+    }
+
     public static function statusOptions(): array
     {
         return ['active' => '在售', 'inactive' => '停用'];
@@ -285,51 +320,322 @@ class Product extends Model
         return (int) ($this->db()->query('SELECT COUNT(*) AS c FROM order_items WHERE product_id IS NULL')->single()['c'] ?? 0);
     }
 
-    /** 校验新增/编辑表单，返回 [data, errors] */
+    // ------------------------------------------------------------ CSV 导入/导出
+
+    /** 单次导入的行数上限：防手滑把几十万行的库存表一次性灌进来 */
+    public const MAX_IMPORT_ROWS = 2000;
+
+    /**
+     * CSV 列定义：字段 => 中文表头（顺序即导出列序）。
+     * 从 static::$fields 里带 csv 语义的列派生 —— 加导出列只改注册表一处。
+     */
+    public static function csvColumns(): array
+    {
+        $out = [];
+        foreach (static::$fields as $name => $meta) {
+            if (empty($meta['csv'])) {
+                continue;
+            }
+            $label = is_array($meta['csv']) ? ($meta['csv']['label'] ?? $meta['label'] ?? $name)
+                                           : ($meta['label'] ?? $name);
+            $out[$name] = (string) $label;
+        }
+        return $out;
+    }
+
+    /** CSV 里的数字：整数不带小数点，小数最多两位，不补多余零 */
+    public static function csvNumber(float $n): string
+    {
+        if (abs($n - round($n)) < 1e-9) {
+            return (string) (int) round($n);
+        }
+        return rtrim(rtrim(number_format($n, 2, '.', ''), '0'), '.');
+    }
+
+    /**
+     * 导出（按当前列表筛选条件，与列表同序）。行值是给人看的可读文本：
+     * 编号已回填、价格去尾零、状态给中文，Excel 打开即可读，也能再导回去。
+     *
+     * @return array<int,array<string,string>> 行，键与 csvColumns() 一一对应
+     */
+    public function exportRows(string $search = '', string $status = '', string $category = ''): array
+    {
+        [$sql, $params] = $this->buildWhere('SELECT * FROM products p', 'p', $search, $status, $category);
+        $sql .= ' ORDER BY p.status ASC, p.name ASC';
+        $stmt = $this->db()->query($sql);
+        foreach ($params as $k => $v) {
+            $stmt->bind($k, $v);
+        }
+
+        $rows = [];
+        foreach ($stmt->resultSet() as $p) {
+            $row = [];
+            foreach (self::csvColumns() as $field => $label) {
+                $row[$field] = self::csvCell($p, $field);
+            }
+            $rows[] = $row;
+        }
+        return $rows;
+    }
+
+    /** 导出行单元格：数值列去尾零、状态给中文、编号回填，其余原样文本 */
+    private function csvCell(array $p, string $field): string
+    {
+        $type = (string) ((static::$fields[$field]['type'] ?? '') ?: '');
+        $meta = static::$fields[$field] ?? [];
+        if ($field === 'public_code') {
+            return $this->codeOf($p);
+        }
+        if ($type === 'number' || $type === 'money') {
+            $v = $p[$field] ?? null;
+            return $v === null ? '' : self::csvNumber((float) $v);
+        }
+        if ($field === 'status') {
+            return self::statusLabel((string) ($p['status'] ?? 'active'));
+        }
+        if ($field === 'unit') {
+            return (string) ($p['unit'] ?? '件');
+        }
+        if (isset($meta['csv']) && is_array($meta['csv']) && ($meta['csv']['format'] ?? null) === null) {
+            // 预留：今后 csv.format 自定义
+        }
+        $v = $p[$field] ?? '';
+        return $v === null ? '' : (string) $v;
+    }
+
+    /** 字节串 → UTF-8；无法识别返回 null。先剥 BOM，再验 UTF-8，最后尝试 GBK 系（Excel 中文另存常用） */
+    public static function decodeToUtf8(string $bytes): ?string
+    {
+        if (str_starts_with($bytes, "\xEF\xBB\xBF")) {
+            $bytes = substr($bytes, 3);
+        }
+        if (preg_match('//u', $bytes)) {
+            return $bytes;                                   // 已是合法 UTF-8
+        }
+        if (function_exists('iconv')) {
+            $out = @iconv('GB18030', 'UTF-8//IGNORE', $bytes);
+            if ($out !== false && preg_match('//u', $out)) {
+                return $out;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 从 CSV 文件导入/更新商品（幂等：同一份文件导两遍不会多出商品）。
+     *
+     * 身份规则：行带非空 SKU 且库里已有同 SKU → 更新那条；否则名称在库里恰好
+     * 唯一命中 → 更新；两者都没有 → 新建。名称撞多条时跳过并提示用 SKU 区分。
+     *
+     * 更新只写 CSV 里真实存在的列，缺失列保留库中原值（归属人、编号永远不动），
+     * 所以“只导名称/SKU 两列”也能安全地修一批商品名。不合规的行整行跳过并记原因。
+     *
+     * @return array{created:int, updated:int, skipped:int, errors:array<int,string>}
+     */
+    public function importCsvFile(string $path, int $ownerId): array
+    {
+        if (!is_readable($path)) {
+            throw new RuntimeException('无法读取上传的 CSV 文件。');
+        }
+        $utf8 = self::decodeToUtf8((string) file_get_contents($path));
+        if ($utf8 === null || $utf8 === '') {
+            throw new RuntimeException('CSV 文件是空的，或编码无法识别（不是 UTF-8 也不是 GBK）。请另存为 UTF-8 后再试。');
+        }
+        $utf8 = str_replace(["\r\n", "\r"], "\n", $utf8);   // 规整换行：好数行号、fgetcsv 好解析
+
+        // 表头行的字段分隔符最常见，按它猜整份文件的分隔符（Excel 区域设置可能导出 ; ）
+        $nl = strpos($utf8, "\n");
+        $firstLine = $nl === false ? $utf8 : substr($utf8, 0, $nl);
+        $counts = [
+            ';' => substr_count($firstLine, ';'),
+            ',' => substr_count($firstLine, ','),
+            "\t" => substr_count($firstLine, "\t"),
+        ];
+        $delim = (int) max($counts) === 0 ? ',' : (string) array_search(max($counts), $counts, true);
+
+        $h = fopen('php://temp', 'r+');
+        if ($h === false) {
+            throw new RuntimeException('无法处理上传内容。');
+        }
+        fwrite($h, $utf8);
+        rewind($h);
+
+        $header = fgetcsv($h, 0, $delim);
+        if (!is_array($header)) {
+            fclose($h);
+            throw new RuntimeException('表头行解析失败：第一行应是列名（如 名称,SKU,单价）。');
+        }
+        $map = self::mapCsvHeader(array_map(static fn($c) => (string) $c, $header));
+
+        $stat = ['created' => 0, 'updated' => 0, 'skipped' => 0, 'errors' => []];
+        $present = array_diff(array_keys($map), ['public_code']);   // 文件真实带了的列
+        $line = 1;                                                   // 表头占第 1 行
+        while (($cells = fgetcsv($h, 0, $delim)) !== false) {
+            $line++;
+            if ($line - 1 > self::MAX_IMPORT_ROWS) {
+                fclose($h);
+                throw new RuntimeException('一次最多导入 ' . self::MAX_IMPORT_ROWS . ' 行商品，请分批导入。');
+            }
+
+            $input = [];
+            $any = false;
+            $statusProblem = '';
+            foreach ($map as $field => $idx) {
+                $v = trim((string) ($cells[$idx] ?? ''));
+                if ($field === 'status' && $v !== '') {
+                    $ok = self::parseStatusValue($v);
+                    if ($ok === null) {
+                        $statusProblem = $v;
+                        continue;
+                    }
+                    $v = $ok;
+                }
+                if ($v !== '') {
+                    $any = true;
+                }
+                $input[$field] = $v;
+            }
+            if ($statusProblem !== '') {
+                $stat['skipped']++;
+                $stat['errors'][] = "第 {$line} 行：状态「{$statusProblem}」不认识，请用 在售/停用（或 active/inactive）。";
+                continue;
+            }
+            if (!$any) {
+                continue;                                        // 完全空行
+            }
+            unset($input['public_code']);                        // 编号只读，永不写
+
+            $selfId = $this->findImportTarget((string) ($input['sku'] ?? ''), (string) ($input['name'] ?? ''));
+            if ($selfId === -1) {
+                $stat['skipped']++;
+                $stat['errors'][] = '第 ' . $line . ' 行：名称「' . (string) ($input['name'] ?? '') . '」在库里对应多个商品，无法确定更新哪个，请补上 SKU。';
+                continue;
+            }
+
+            if ($selfId > 0) {
+                // 更新：缺失列用库中原值补齐再走同一套业务校验，落库只写文件里有的列
+                $existing = (array) $this->find($selfId);
+                $merged = $input;
+                foreach (['name', 'sku', 'category', 'brand', 'spec', 'unit', 'price', 'cost', 'status', 'notes'] as $f) {
+                    if (($merged[$f] ?? '') === '') {
+                        $old = $existing[$f] ?? '';
+                        $merged[$f] = $old === null ? '' : (string) $old;
+                    }
+                }
+                [$data, $errors] = self::validateInput($merged, $selfId);
+                if ($errors) {
+                    $stat['skipped']++;
+                    $stat['errors'][] = '第 ' . $line . ' 行：' . $errors[0];
+                    continue;
+                }
+                $this->update($selfId, array_intersect_key($data, array_flip($present)));
+                $stat['updated']++;
+            } else {
+                [$data, $errors] = self::validateInput($input, 0);
+                if ($errors) {
+                    $stat['skipped']++;
+                    $stat['errors'][] = '第 ' . $line . ' 行：' . $errors[0];
+                    continue;
+                }
+                $data['owner_id'] = $ownerId;
+                $this->create($data);
+                $stat['created']++;
+            }
+        }
+        fclose($h);
+        return $stat;
+    }
+
+    /** 行内 SKU/名称 → 库里已有商品 id；0 = 应新建，-1 = 名称歧义不能猜 */
+    private function findImportTarget(string $sku, string $name): int
+    {
+        if ($sku !== '') {
+            $row = $this->db()->query('SELECT id FROM products WHERE LOWER(sku) = LOWER(:s) ORDER BY id LIMIT 1')
+                ->bind(':s', $sku)->single();
+            if ($row) {
+                return (int) $row['id'];
+            }
+        }
+        if ($name === '') {
+            return 0;
+        }
+        $rows = $this->db()->query('SELECT id FROM products WHERE LOWER(name) = LOWER(:n) ORDER BY id LIMIT 2')
+            ->bind(':n', $name)->resultSet();
+        return count($rows) === 1 ? (int) $rows[0]['id'] : (count($rows) > 1 ? -1 : 0);
+    }
+
+    /** 状态列的可读值 → 库值；不认识返回 null */
+    private static function parseStatusValue(string $v): ?string
+    {
+        return match (strtolower($v)) {
+            'active', '在售', '上架', '1' => 'active',
+            'inactive', '停用', '下架', '0' => 'inactive',
+            default => null,
+        };
+    }
+
+    /**
+     * 表头单元格 → 标准字段；找不到「名称」列直接抛错（没有名字的导入一定建不出合规商品）。
+     * 可识别写法 = CSV 元数据（label/aliases）+ 英文字段名 + 历史兼容别名。
+     */
+    private static function mapCsvHeader(array $header): array
+    {
+        // 历史兼容别名：表头用英文/俗名也要认（csv 元数据之外补一层，不影响字段派生）
+        $extraAliases = [
+            'name'        => ['商品名称', '商品', '产品名称', '品名', 'name'],
+            'public_code' => ['public_code', 'public code'],
+            'sku'         => ['货号'],
+            'category'    => ['category'],
+            'brand'       => ['brand'],
+            'spec'        => ['型号'],
+            'unit'        => ['unit'],
+            'price'       => ['售价', '价格', 'price'],
+            'cost'        => ['成本'],
+            'status'      => ['status'],
+            'notes'       => ['说明'],
+        ];
+        $aliases = [];
+        foreach (static::$fields as $name => $meta) {
+            if (empty($meta['csv'])) {
+                continue;
+            }
+            $csvMeta = is_array($meta['csv']) ? $meta['csv'] : [];
+            $headerName = is_array($meta['csv'])
+                ? ($csvMeta['label'] ?? $meta['label'] ?? $name)
+                : ($meta['label'] ?? $name);
+            $aliases[$name] = array_values(array_unique(array_merge(
+                [$headerName, $name],
+                (array) ($csvMeta['aliases'] ?? []),
+                (array) ($extraAliases[$name] ?? [])
+            )));
+        }
+
+        $map = [];
+        foreach ($aliases as $field => $tokens) {
+            foreach ($header as $i => $cell) {
+                $c = strtolower(trim($cell));
+                if ($c === '') {
+                    continue;
+                }
+                foreach ($tokens as $token) {
+                    if ($c === strtolower(trim($token))) {
+                        $map[$field] = $i;
+                        break 2;
+                    }
+                }
+            }
+        }
+        if (!isset($map['name'])) {
+            throw new RuntimeException('表头里没找到「名称」列。请保留表头行，列名可用中文（名称/商品名称）或 name。');
+        }
+        return $map;
+    }
+
+    /**
+     * 校验新增/编辑表单，返回 [data, errors]（薄封装：规则见 static::$fields + hooks）
+     */
     public static function validateInput(array $input, int $selfId = 0): array
     {
-        $errors = [];
-        $data = [
-            'name'     => trim((string) ($input['name'] ?? '')),
-            'sku'      => trim((string) ($input['sku'] ?? '')),
-            'category' => trim((string) ($input['category'] ?? '')),
-            'brand'    => trim((string) ($input['brand'] ?? '')),
-            'spec'     => trim((string) ($input['spec'] ?? '')),
-            'unit'     => trim((string) ($input['unit'] ?? '件')) ?: '件',
-            'price'    => is_numeric($input['price'] ?? null) ? (float) $input['price'] : null,
-            'cost'     => isset($input['cost']) && $input['cost'] !== '' && is_numeric($input['cost']) ? (float) $input['cost'] : null,
-            'status'   => in_array((string) ($input['status'] ?? ''), ['active', 'inactive'], true)
-                            ? (string) $input['status'] : 'active',
-            'notes'    => trim((string) ($input['notes'] ?? '')),
-        ];
-        if ($data['name'] === '') {
-            $errors[] = '商品名称必填。';
-        }
-        if (textLength($data['name']) > 150) {
-            $errors[] = '商品名称最长 150 字。';
-        }
-        if (textLength($data['sku']) > 60) {
-            $errors[] = 'SKU 最长 60 字。';
-        }
-        if ($data['price'] === null) {
-            $errors[] = '单价必须填数字（没有价格就填 0，别留空）。';
-        } elseif ($data['price'] < 0 || $data['price'] > Ai::MAX_AMOUNT) {
-            $errors[] = '单价超出合理范围。';
-        }
-        if ($data['cost'] !== null && ($data['cost'] < 0 || $data['cost'] > Ai::MAX_AMOUNT)) {
-            $errors[] = '参考价超出合理范围。';
-        }
-        if (!in_array($data['unit'], self::unitOptions(), true)) {
-            $errors[] = '单位不在可选值里。';
-        }
-        if ($data['sku'] !== '' && (new self())->skuTaken($data['sku'], $selfId)) {
-            $errors[] = 'SKU「' . $data['sku'] . '」已被其它商品占用，换个编号或直接留空。';
-        }
-        // 空串写 NULL：唯一索引不约束 NULL，留空才能重复
-        $data['sku'] = $data['sku'] === '' ? null : $data['sku'];
-        foreach (['category', 'brand', 'spec', 'notes'] as $k) {
-            $data[$k] = $data[$k] === '' ? null : $data[$k];
-        }
-        return [$data, $errors];
+        return (new self())->sanitizeInput($input, ['selfId' => $selfId]);
     }
 }

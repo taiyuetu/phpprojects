@@ -5,6 +5,8 @@
 $o = $old ?? $order ?? [];
 ?>
 <div class="row g-3 mb-3">
+    <?php $fieldsOwner = new Order(); $values = $o ?? []; ?>
+    <?php include APP_PATH . '/views/partials/_fields_auto.php'; ?>
     <div class="col-md-6">
         <label class="form-label">订单编号 *</label>
         <input type="text" name="order_number" class="form-control" value="<?= e($o['order_number'] ?? $orderNumber ?? '') ?>" required>

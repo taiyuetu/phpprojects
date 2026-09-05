@@ -18,6 +18,8 @@ $dealValue = (float) ($d['value'] ?? 0);
 $valueAuto = ($dealValue == 0.0 || abs($dealValue - $formRowsTotal) < 0.005) ? '1' : '0';
 ?>
 <div class="row g-3 mb-3">
+    <?php $fieldsOwner = new Deal(); $values = $d ?? []; ?>
+    <?php include APP_PATH . '/views/partials/_fields_auto.php'; ?>
     <div class="col-md-8">
         <label class="form-label">商机名称 *</label>
         <input type="text" name="title" class="form-control" value="<?= e($d['title'] ?? '') ?>" required>

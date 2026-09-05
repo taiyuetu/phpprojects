@@ -11,6 +11,32 @@ class Customer extends Model
 
     protected string $table = 'customers';
 
+    /**
+     * 字段语义注册表（稀疏）：结构看 schema.sql，这里只补语义。
+     * searchable 列与改动前 $searchable 的清单一致 → 搜索行为不变。
+     */
+    protected static array $fields = [
+        'name'        => ['label' => '姓名', 'type' => 'string', 'searchable' => true,
+                          'required' => true, 'requiredMsg' => '客户姓名不能为空。'],
+        'company'     => ['label' => '公司', 'searchable' => true],
+        'email'       => ['label' => '邮箱', 'type' => 'email', 'emailValidate' => true, 'searchable' => true],
+        'phone'       => ['label' => '电话', 'searchable' => true],
+        'whatsapp'    => ['label' => 'WhatsApp', 'searchable' => true],
+        'wechat'      => ['label' => '微信', 'searchable' => true],
+        'facebook'    => ['label' => 'Facebook 主页'],
+        'tiktok'      => ['label' => 'TikTok 频道'],
+        'website'     => ['label' => '官方网站'],
+        'source_country' => ['label' => '来源国家', 'searchable' => true],
+        'source_city'    => ['label' => '来源城市'],
+        'address'     => ['label' => '地址'],
+        'shipping_address' => ['label' => '收货地址', 'type' => 'text'],
+        'first_purchase_from_china' => ['label' => '是否首次从中国采购', 'type' => 'bool'],
+        'has_import_capability'     => ['label' => '是否有进口能力', 'type' => 'bool'],
+        'conversion_time' => ['label' => '转化时间', 'type' => 'datetime'],
+        'status'      => ['label' => '状态', 'type' => 'enum', 'default' => 'active'],
+        'notes'       => ['label' => '备注', 'type' => 'text', 'searchable' => true],
+    ];
+
     /** All customers with their owner's name, newest first, optional search. */
     public function allWithOwner(string $search = '', int $page = 1, int $perPage = 15): array
     {
@@ -20,7 +46,7 @@ class Customer extends Model
         $params = [];
 
         if ($search !== '') {
-            [$where, $sparams] = $this->customerSearchWhere($search);
+            [$where, $sparams] = $this->searchWhere($search, 'c');
             $sql .= ' WHERE ' . $where;
             $params = array_merge($params, $sparams);
         }
@@ -43,7 +69,7 @@ class Customer extends Model
         $params = [];
 
         if ($search !== '') {
-            [$where, $sparams] = $this->customerSearchWhere($search);
+            [$where, $sparams] = $this->searchWhere($search, 'c');
             $sql .= ' WHERE ' . $where;
             $params = array_merge($params, $sparams);
         }
@@ -53,27 +79,6 @@ class Customer extends Model
             $stmt->bind($key, $value);
         }
         return (int) ($stmt->single()['total'] ?? 0);
-    }
-
-    /**
-     * 跨列搜索的 WHERE 片段（c 是 customers 的别名）。
-     *
-     * 用户输入的 '%' / '_' 必须先转义，否则一个 % 就是“匹配整表”；SQLite 的 LIKE
-     * 默认不设 escape 字符，所以每一处 LIKE 都要带 ESCAPE '\'（与 Ai::likeValue() 同口径）。
-     *
-     * @return array{0:string, 1:array<string,string>} [where 片段, 参数]
-     */
-    private function customerSearchWhere(string $search): array
-    {
-        $term = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $search) . '%';
-        $bits = [];
-        $params = [];
-        foreach (['name', 'company', 'email', 'phone', 'whatsapp', 'wechat', 'source_country', 'notes'] as $col) {
-            $key = ':sc_' . $col;
-            $bits[] = "c.{$col} LIKE {$key} ESCAPE '\\'";
-            $params[$key] = $term;
-        }
-        return [implode(' OR ', $bits), $params];
     }
 
     public function findWithOwner(int $id)

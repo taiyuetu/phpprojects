@@ -5,6 +5,8 @@
 $c = $old ?? $customer ?? [];
 ?>
 <div class="row g-3 mb-3">
+    <?php $fieldsOwner = new Customer(); $values = $c ?? []; ?>
+    <?php include APP_PATH . '/views/partials/_fields_auto.php'; ?>
     <div class="col-md-6">
         <label class="form-label">姓名 *</label>
         <input type="text" name="name" class="form-control" value="<?= e($c['name'] ?? '') ?>" required>

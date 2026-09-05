@@ -287,35 +287,7 @@ class CustomerController extends Controller
     /** @return array{0: array, 1: array} [validated data, errors] */
     private function validate(array $input): array
     {
-        $data = [
-            'name'    => trim($input['name'] ?? ''),
-            'company' => trim($input['company'] ?? '') ?: null,
-            'email'   => trim($input['email'] ?? '') ?: null,
-            'phone'   => trim($input['phone'] ?? '') ?: null,
-            'whatsapp'      => trim($input['whatsapp'] ?? '') ?: null,
-            'wechat'        => trim($input['wechat'] ?? '') ?: null,
-            'facebook'      => trim($input['facebook'] ?? '') ?: null,
-            'tiktok'        => trim($input['tiktok'] ?? '') ?: null,
-            'website'       => trim($input['website'] ?? '') ?: null,
-            'source_country'=> trim($input['source_country'] ?? '') ?: null,
-            'source_city'   => trim($input['source_city'] ?? '') ?: null,
-            'first_purchase_from_china' => isset($input['first_purchase_from_china']) ? 1 : 0,
-            'has_import_capability'     => isset($input['has_import_capability']) ? 1 : 0,
-            'conversion_time' => trim($input['conversion_time'] ?? '') ?: null,
-            'address' => trim($input['address'] ?? '') ?: null,
-            'shipping_address' => trim($input['shipping_address'] ?? '') ?: null,
-            'status'  => in_array($input['status'] ?? '', ['active', 'inactive'], true) ? $input['status'] : 'active',
-            'notes'   => trim($input['notes'] ?? '') ?: null,
-        ];
-
-        $errors = [];
-        if ($data['name'] === '') {
-            $errors[] = '客户姓名不能为空。';
-        }
-        if ($data['email'] && !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
-            $errors[] = '请输入有效的邮箱地址。';
-        }
-
-        return [$data, $errors];
+        // 规则白名单在 Customer::$fields（见 core/Fields.php），控制器只做委托
+        return (new Customer())->sanitizeInput($input);
     }
 }

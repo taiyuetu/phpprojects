@@ -9,12 +9,23 @@
 </div>
 
 <div class="card card-table">
-    <div class="card-header bg-white d-flex gap-2">
-        <?php $filters = ['' => '全部', 'new' => '新建', 'contacted' => '已联系', 'qualified' => '已确认', 'lost' => '已流失']; ?>
-        <?php foreach ($filters as $value => $label): ?>
-            <a href="<?= url('/leads' . ($value ? '?status=' . $value : '')) ?>"
-               class="btn btn-sm <?= $status === $value ? 'btn-secondary' : 'btn-outline-secondary' ?>"><?= e($label) ?></a>
-        <?php endforeach; ?>
+    <div class="card-header bg-white d-flex flex-wrap gap-2 align-items-center justify-content-between">
+        <div class="d-flex flex-wrap gap-2">
+            <?php $filters = ['' => '全部', 'new' => '新建', 'contacted' => '已联系', 'qualified' => '已确认', 'lost' => '已流失']; ?>
+            <?php foreach ($filters as $value => $label): ?>
+                <a href="<?= url('/leads' . ($value ? '?status=' . $value : '') . ($search !== '' ? ($value ? '&q=' : '?q=') . urlencode($search) : '')) ?>"
+                   class="btn btn-sm <?= $status === $value ? 'btn-secondary' : 'btn-outline-secondary' ?>"><?= e($label) ?></a>
+            <?php endforeach; ?>
+        </div>
+        <form method="GET" action="<?= url('/leads') ?>" class="d-flex gap-2">
+            <?php if ($status !== ''): ?><input type="hidden" name="status" value="<?= e($status) ?>"><?php endif; ?>
+            <input type="text" name="q" class="form-control form-control-sm" style="max-width:260px"
+                   placeholder="搜索标题、公司、联系人、来源…" value="<?= e($search) ?>">
+            <button class="btn btn-sm btn-outline-secondary" type="submit">搜索</button>
+            <?php if ($search !== ''): ?>
+                <a href="<?= url('/leads') ?>" class="btn btn-sm btn-link">清除</a>
+            <?php endif; ?>
+        </form>
     </div>
     <div class="table-responsive">
         <table class="table mb-0 align-middle">
@@ -137,7 +148,13 @@
 <?php endforeach; ?>
 
 <?php
-$baseUrl = url('/leads?page=') . ($status ? '&status=' . urlencode($status) : '');
-if (!$status) $baseUrl = url('/leads?page=');
+$qs = [];
+if ($status !== '') {
+    $qs[] = 'status=' . urlencode($status);
+}
+if ($search !== '') {
+    $qs[] = 'q=' . urlencode($search);
+}
+$baseUrl = $qs ? url('/leads?' . implode('&', $qs) . '&page=') : url('/leads?page=');
 include APP_PATH . '/views/partials/_pagination.php';
 ?>

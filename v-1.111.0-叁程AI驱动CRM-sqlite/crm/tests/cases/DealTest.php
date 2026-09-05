@@ -86,6 +86,39 @@ function test_unarchive_lost_deal_returns_to_open(): void
     assertEquals('open', $board[0]['stage'], 'board row stage is open');
 }
 
+/** 商机关键词搜索：按标题、按 JOIN 进来的客户名，归档页同样支持 */
+function test_deal_keyword_search(): void
+{
+    $alpha = seedCustomer('Alpha Trading Co');
+    $beta  = seedCustomer('Beta Logistics Ltd');
+    $d = new Deal();
+    seedDeal((int) $alpha['id'], ['title' => 'Aluminium coils', 'value' => 5000]);
+    seedDeal((int) $alpha['id'], ['title' => 'Steel sheets', 'value' => 8000]);
+    seedDeal((int) $beta['id'],  ['title' => 'Aluminium rails', 'value' => 2000]);
+
+    // 按标题关键词
+    $byTitle = $d->allWithCustomer('Steel');
+    assertEquals(1, count($byTitle), '按商机标题搜索');
+    assertEquals('Steel sheets', $byTitle[0]['title'], '命中正确商机');
+
+    // 按 JOIN 进来的客户名，命中该客户名下全部商机
+    $byCustomer = $d->allWithCustomer('Alpha Trading');
+    assertEquals(2, count($byCustomer), '按客户名搜索命中其名下两条');
+    foreach ($byCustomer as $row) {
+        assertEquals('Alpha Trading Co', $row['customer_name'], '命中的都是 Alpha 的商机');
+    }
+
+    // 归档列表同样支持搜索
+    $row = seedDeal((int) $beta['id'], ['title' => 'Warehouse racks']);
+    assertTrue($d->archive((int) $row['id']), 'archive ok');
+    $archived = $d->allArchived('Beta Logistics');
+    assertEquals(1, count($archived), '归档页可按客户名搜');
+    assertEquals('Warehouse racks', $archived[0]['title'], '命中刚归档的那条');
+    assertEquals(0, count($d->allWithCustomer('Warehouse racks')), '已归档的商机不出现在看板搜索结果里');
+    // 归档前同客户的那条未归档商机，看板仍能搜到
+    assertEquals(1, count($d->allWithCustomer('Aluminium rails')), '未归档的同类商机仍可搜到');
+}
+
 function test_deal_orders_lookup(): void
 {
     $cust = seedCustomer('Ord C');

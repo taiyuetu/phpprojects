@@ -75,4 +75,29 @@ function test_lead_listing_and_count(): void
     assertEquals('Admin User', $newOnly[0]['owner_name'], 'owner join present');
 }
 
+/** 线索列表关键词搜索：跨列、可与状态筛选叠加、% 当字面量 */
+function test_lead_keyword_search(): void
+{
+    $l = new Lead();
+    seedLead(['title' => 'Solar inverter 10kW', 'contact_name' => 'Alice', 'status' => 'new']);
+    seedLead(['title' => 'Wind turbine 5kW', 'contact_name' => 'Bob', 'status' => 'contacted']);
+    seedLead(['title' => 'Solar panel 450W', 'contact_name' => 'Carol', 'status' => 'qualified']);
+    seedLead(['title' => '100% 优惠专线', 'status' => 'new']);
+
+    assertEquals(2, (int) $l->countLeads('', 'Solar'), '关键词命中 2 条（标题）');
+    $found = $l->allLeads('', 1, 15, 'Solar');
+    assertEquals(2, count($found), 'allLeads 与 countLeads 同一份 WHERE');
+
+    assertEquals(1, count($l->allLeads('', 1, 15, 'Alice')), '关键词可搜联系人');
+
+    // 状态筛选与关键词叠加是 AND，不是互斥
+    $both = $l->allLeads('new', 1, 15, 'Solar');
+    assertEquals(1, count($both), '状态 + 关键词同时生效');
+    assertEquals('Solar inverter 10kW', $both[0]['title'], '命中那条 new + Solar');
+
+    // '%' 按字面量搜，不会变成“匹配整表”（转义路径与客户搜索同源）
+    assertEquals(1, count($l->allLeads('', 1, 15, '%')), '百分号按字面量搜索');
+    assertEquals(1, (int) $l->countLeads('', '%'), 'count 与列表口径一致');
+}
+
 runCase();

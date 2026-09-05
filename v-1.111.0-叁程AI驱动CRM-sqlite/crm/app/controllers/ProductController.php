@@ -16,6 +16,72 @@ class ProductController extends Controller
     /** 选择框一次带出去的商品数：再多就该走搜索而不是塞进下拉 */
     private const PICK_LIMIT = 800;
 
+    /** CSV 导入上限：2MB（服务端硬限，视图提示与此一致） */
+    private const MAX_IMPORT_BYTES = 2097152;
+
+    /** 导出 CSV（按当前筛选条件），UTF-8 带 BOM，Excel 可直接打开 */
+    public function export(): void
+    {
+        $this->requireAuth();
+
+        $q = trim((string) ($_GET['q'] ?? ''));
+        $status = trim((string) ($_GET['status'] ?? ''));
+        $category = trim((string) ($_GET['category'] ?? ''));
+
+        $rows = $this->model('Product')->exportRows($q, $status, $category);
+        $this->sendCsv('products-' . date('Ymd-His') . '.csv', Product::csvColumns(), $rows);
+    }
+
+    /** 导入 CSV（新建 + 按 SKU/唯一名称更新），结果用 flash 汇报 */
+    public function import(): void
+    {
+        $this->requireAuth();
+        $this->verifyCsrf();
+
+        $file = $_FILES['csv_file'] ?? null;
+        if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+            $this->setFlash('error', '请先选择要导入的 CSV 文件。');
+            $this->redirect('/products');
+            return;
+        }
+        if ((int) $file['error'] !== UPLOAD_ERR_OK) {
+            $this->setFlash('error', '文件上传失败（错误码 ' . (int) $file['error'] . '）。');
+            $this->redirect('/products');
+            return;
+        }
+        if ((int) ($file['size'] ?? 0) <= 0) {
+            $this->setFlash('error', '上传的文件是空的。');
+            $this->redirect('/products');
+            return;
+        }
+        if ((int) ($file['size'] ?? 0) > self::MAX_IMPORT_BYTES) {
+            $this->setFlash('error', '文件超过 2MB，请精简后分批导入。');
+            $this->redirect('/products');
+            return;
+        }
+
+        try {
+            $stat = $this->model('Product')->importCsvFile((string) $file['tmp_name'], (int) $_SESSION['user_id']);
+        } catch (Throwable $e) {
+            $this->setFlash('error', '导入失败：' . $e->getMessage());
+            $this->redirect('/products');
+            return;
+        }
+
+        $summary = '导入完成：新建 ' . (int) $stat['created'] . ' 个，更新 ' . (int) $stat['updated'] . ' 个';
+        if ((int) $stat['skipped'] > 0) {
+            $summary .= '，跳过 ' . (int) $stat['skipped'] . ' 行（未改动任何数据）';
+        }
+        $summary .= '。';
+        if ($stat['errors']) {
+            $summary .= ' 示例：' . implode(' ', array_slice($stat['errors'], 0, 3));
+            $this->setFlash('warning', $summary);
+        } else {
+            $this->setFlash('success', $summary);
+        }
+        $this->redirect('/products');
+    }
+
     public function index(): void
     {
         $this->requireAuth();

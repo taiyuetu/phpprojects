@@ -11,28 +11,72 @@ class Deal extends Model
 
     protected string $table = 'deals';
 
-    /** 未归档的商机（看板/列表用） */
-    public function allWithCustomer(): array
+    /**
+     * 字段语义注册表（稀疏）：结构看 schema.sql，这里补语义。
+     * 阶段时间戳/归档等系统列不在此列 —— 由 status/stage 流转逻辑连带维护。
+     */
+    protected static array $fields = [
+        'title'       => ['label' => '商机名称', 'type' => 'string', 'searchable' => true,
+                          'required' => true, 'requiredMsg' => '商机名称不能为空。'],
+        'customer_id' => ['label' => '客户', 'type' => 'int', 'searchable' => true,
+                          'required' => true, 'requiredMsg' => '请选择一个客户。'],
+        'value'       => ['label' => '金额', 'type' => 'number', 'default' => '0'],
+        'stage'       => ['label' => '阶段', 'type' => 'enum', 'default' => 'open'],
+        'close_date'  => ['label' => '预计成交日期', 'type' => 'date'],
+    ];
+
+    /**
+     * 商机关键词搜索覆盖的列：标题 + JOIN 进来的客户（客户名是最常用的查法）。
+     * 已归档列表同样复用这份配置。
+     */
+    protected array $searchable = ['title', 'c.name', 'c.company'];
+
+    /** 未归档的商机（看板/列表用），$search 可选关键词 */
+    public function allWithCustomer(string $search = ''): array
     {
-        return $this->db()->query(
-            "SELECT d.*, c.name AS customer_name
-             FROM deals d
-             LEFT JOIN customers c ON c.id = d.customer_id
-             WHERE d.archived = 0
-             ORDER BY d.created_at DESC"
-        )->resultSet();
+        $sql = "SELECT d.*, c.name AS customer_name
+                FROM deals d
+                LEFT JOIN customers c ON c.id = d.customer_id";
+        $params = [];
+
+        $where = ['d.archived = 0'];
+        if ($search !== '') {
+            [$bits, $sparams] = $this->searchWhere($search, 'd');
+            $where[] = $bits;
+            $params = array_merge($params, $sparams);
+        }
+        $sql .= ' WHERE ' . implode(' AND ', $where);
+        $sql .= ' ORDER BY d.created_at DESC';
+
+        $stmt = $this->db()->query($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bind($key, $value);
+        }
+        return $stmt->resultSet();
     }
 
-    /** 已归档的商机 */
-    public function allArchived(): array
+    /** 已归档的商机，$search 可选关键词 */
+    public function allArchived(string $search = ''): array
     {
-        return $this->db()->query(
-            "SELECT d.*, c.name AS customer_name
-             FROM deals d
-             LEFT JOIN customers c ON c.id = d.customer_id
-             WHERE d.archived = 1
-             ORDER BY d.archived_at DESC"
-        )->resultSet();
+        $sql = "SELECT d.*, c.name AS customer_name
+                FROM deals d
+                LEFT JOIN customers c ON c.id = d.customer_id";
+        $params = [];
+
+        $where = ['d.archived = 1'];
+        if ($search !== '') {
+            [$bits, $sparams] = $this->searchWhere($search, 'd');
+            $where[] = $bits;
+            $params = array_merge($params, $sparams);
+        }
+        $sql .= ' WHERE ' . implode(' AND ', $where);
+        $sql .= ' ORDER BY d.archived_at DESC';
+
+        $stmt = $this->db()->query($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bind($key, $value);
+        }
+        return $stmt->resultSet();
     }
 
     public function sumValueByStage(string $stage): float

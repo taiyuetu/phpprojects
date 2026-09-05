@@ -17,6 +17,8 @@ $val = static fn(string $k, $d = '') => e((string) (($old[$k] ?? $d)));
 <form method="POST" action="<?= e($action ?? url('/products')) ?>" class="card card-table p-4">
     <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
     <div class="row g-3">
+        <?php $fieldsOwner = new Product(); $values = $old ?? []; ?>
+        <?php include APP_PATH . '/views/partials/_fields_auto.php'; ?>
         <div class="col-md-6">
             <label class="form-label">商品名称 <span class="text-danger">*</span></label>
             <input type="text" name="name" class="form-control" required maxlength="150"
