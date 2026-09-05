@@ -6,8 +6,9 @@ $d = $old ?? $deal ?? [];
 // 新建页（含校验失败回显）不传 $deal；编辑页传。成交/丢单是流转的终点，只能从编辑页推进。
 $creating = empty($deal);
 
-// “金额”字段自动跟随明细合计的开关：值为 0，或与当前明细小计一致 → 自动（data-auto=1）；
-// 值与明细不一致（手改过 / 意向金额）→ 手动（data-auto=0），加改行不再覆盖它。
+// “金额”字段初始的自动/手动开关：值为 0，或与当前明细小计一致 → 自动（data-auto=1）；
+// 值与明细不一致（手改过 / 意向金额）→ 手动（data-auto=0），打开页面时不被自动改写。
+// 注意：页面里只要用户再动一次商品行（选商品/改数量单价/加删行）就会重新接管并刷新。
 $formRows = is_array($items ?? null) ? (array) $items : [];
 $formRowsTotal = 0.0;
 foreach ($formRows as $__item) {
@@ -37,7 +38,7 @@ $valueAuto = ($dealValue == 0.0 || abs($dealValue - $formRowsTotal) < 0.005) ? '
         <input type="number" step="0.01" min="0" name="value" id="deal-value-input" class="form-control"
                data-auto="<?= $valueAuto ?>"
                value="<?= e($d['value'] ?? 0) ?>"
-               title="选择商品后按明细小计自动合计；若自己填过（与明细不一致）则不再被自动覆盖">
+               title="选择商品/改数量后按明细小计自动合计；自己手填的金额会保留到你下一次改动商品行为止">
     </div>
     <div class="col-md-4">
         <label class="form-label">阶段</label>

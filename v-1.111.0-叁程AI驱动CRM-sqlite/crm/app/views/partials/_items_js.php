@@ -27,7 +27,8 @@
         let itemIndex = container.querySelectorAll('.item-row').length;
         const amountDisplay = document.getElementById('order-amount-display');
         const amountHidden = document.getElementById('order-amount-hidden');
-        // 商机表单的“金额”输入：跟随明细合计自动填，手改过（data-auto=0）就不再覆盖
+        // 商机表单的“金额”输入：默认跟随明细合计。手填会暂时进入手动（data-auto=0），
+        // 但只要之后又动了商品行（选商品/改数量或单价/加行/删行）就重新接管并刷新。
         const dealValueInput = document.getElementById('deal-value-input');
 
         function money(n) { return (window.CRM_PRODUCT_CURRENCY || '$') + n.toFixed(2); }
@@ -41,14 +42,19 @@
             return subtotal;
         }
 
-        function calcTotal() {
+        function calcTotal(forceDealValue) {
             let total = 0;
             container.querySelectorAll('.item-row').forEach(function (row) { total += calcRow(row); });
             totalEl.textContent = money(total);
             if (amountDisplay) amountDisplay.value = money(total);
             if (amountHidden) amountHidden.value = total.toFixed(2);
-            if (dealValueInput && dealValueInput.dataset.auto !== '0') {
-                dealValueInput.value = total > 0 ? total.toFixed(2) : '';
+            if (dealValueInput) {
+                // force = 这一轮是用户动了商品行，无论之前手填过什么都以明细合计为准（最后一次操作为主）
+                const allow = forceDealValue || dealValueInput.dataset.auto !== '0';
+                if (allow) {
+                    dealValueInput.value = total > 0 ? total.toFixed(2) : '';
+                    if (total > 0) dealValueInput.dataset.auto = '1';
+                }
             }
         }
 
@@ -79,10 +85,10 @@
             row.querySelectorAll('[name$="[legacy_name]"], [name$="[legacy_price]"]').forEach(function (el) { el.remove(); });
             const warn = row.querySelector('.form-text.text-warning');
             if (warn) warn.remove();
-            calcTotal();
+            calcTotal(true);   // 选商品 = 最新意图，金额以明细合计为准
         });
 
-        // 用户手改“金额”→ 变成手动模式（此后加行/改行不再覆盖它）；清成 0/空则回到自动
+        // 手改“金额”→ 暂时手动模式（后续动商品行仍会重新接管）；清成 0/空则直接回到自动
         if (dealValueInput) {
             dealValueInput.addEventListener('input', function () {
                 this.dataset.auto = (this.value === '' || Number(this.value) === 0) ? '1' : '0';
@@ -96,7 +102,7 @@
                 if (t.dataset.auto === '1' && t.value === '') return;
                 t.dataset.auto = '0';
             }
-            if (t.classList.contains('item-qty') || t.classList.contains('item-price')) calcTotal();
+            if (t.classList.contains('item-qty') || t.classList.contains('item-price')) calcTotal(true);
         });
 
         container.addEventListener('click', function (ev) {
@@ -122,7 +128,7 @@
                 const qty = row.querySelector('.item-qty'); if (qty) qty.value = '1';
                 const price = row.querySelector('.item-price'); if (price) price.value = '0';
             }
-            calcTotal();
+            calcTotal(true);   // 删/清行同样是最新意图
         });
 
         if (addBtn && template) {
@@ -143,13 +149,13 @@
                     delete picker.dataset.legacy;
                     if (window.CrmProductPicker) window.CrmProductPicker.init(picker);
                 });
-                calcTotal();
+                calcTotal(true);
                 const first = row.querySelector('.picker-search');
                 if (first) first.focus();
             });
         }
 
-        calcTotal();
+        calcTotal(false);   // 页面初始：尊重服务端预置的手动/自动状态，不强制改写
     });
 })();
 </script>
