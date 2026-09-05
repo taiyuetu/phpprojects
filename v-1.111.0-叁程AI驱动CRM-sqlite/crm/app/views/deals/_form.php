@@ -5,6 +5,16 @@
 $d = $old ?? $deal ?? [];
 // 新建页（含校验失败回显）不传 $deal；编辑页传。成交/丢单是流转的终点，只能从编辑页推进。
 $creating = empty($deal);
+
+// “金额”字段自动跟随明细合计的开关：值为 0，或与当前明细小计一致 → 自动（data-auto=1）；
+// 值与明细不一致（手改过 / 意向金额）→ 手动（data-auto=0），加改行不再覆盖它。
+$formRows = is_array($items ?? null) ? (array) $items : [];
+$formRowsTotal = 0.0;
+foreach ($formRows as $__item) {
+    $formRowsTotal += (float) ($__item['quantity'] ?? 0) * (float) ($__item['unit_price'] ?? 0);
+}
+$dealValue = (float) ($d['value'] ?? 0);
+$valueAuto = ($dealValue == 0.0 || abs($dealValue - $formRowsTotal) < 0.005) ? '1' : '0';
 ?>
 <div class="row g-3 mb-3">
     <div class="col-md-8">
@@ -23,8 +33,11 @@ $creating = empty($deal);
         </select>
     </div>
     <div class="col-md-4">
-        <label class="form-label">金额</label>
-        <input type="number" step="0.01" min="0" name="value" class="form-control" value="<?= e($d['value'] ?? 0) ?>">
+        <label class="form-label">金额 <span class="text-muted small fw-normal">（明细合计，可手改）</span></label>
+        <input type="number" step="0.01" min="0" name="value" id="deal-value-input" class="form-control"
+               data-auto="<?= $valueAuto ?>"
+               value="<?= e($d['value'] ?? 0) ?>"
+               title="选择商品后按明细小计自动合计；若自己填过（与明细不一致）则不再被自动覆盖">
     </div>
     <div class="col-md-4">
         <label class="form-label">阶段</label>

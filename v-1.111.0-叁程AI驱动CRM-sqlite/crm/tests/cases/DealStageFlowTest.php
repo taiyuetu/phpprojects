@@ -267,6 +267,8 @@ function test_create_and_save_open_deal_without_products(): void
         $createPage = $http->get($base . '/deals/create')['body'];
         assertContains('id="items-section"', $createPage, '新建页有商品明细区');
         assertContains('items[0][product_id]', $createPage, '有一行可填的商品选择框');
+        assertContains('id="deal-value-input"', $createPage, '金额输入带 id，供明细自动合计');
+        assertContains('明细合计，可手改', $createPage, '金额标签说明它是明细合计');
         assertTrue(!str_contains($createPage, 'id="items-section" class="mt-3" style="display:none;"'),
             '明细区不再被 display:none 藏起来');
         assertTrue(!str_contains($createPage, '> 成交 <') && !str_contains($createPage, '>成交<'),
@@ -286,6 +288,10 @@ function test_create_and_save_open_deal_without_products(): void
         assertEquals(1, count($deals), '库里有这张商机');
         assertEquals('开放商机·不填商品', $deals[0]['title']);
         assertEquals('open', $deals[0]['stage'], '阶段保持进行中');
+        // 手动填了金额（与无明细的 0 不一致）→ 编辑页该字段应为手动模式，不被自动覆盖
+        $editManPage = $http->get($base . '/deals/' . (int) $deals[0]['id'] . '/edit')['body'];
+        assertTrue(preg_match('/id="deal-value-input"[^>]*data-auto="0"/', $editManPage) === 1,
+            '手填金额（≠明细合计）时字段进入手动模式');
 
         // 编辑这张“进行中”商机：明细区同样可见
         $editPage = $http->get($base . '/deals/' . (int) $deals[0]['id'] . '/edit')['body'];

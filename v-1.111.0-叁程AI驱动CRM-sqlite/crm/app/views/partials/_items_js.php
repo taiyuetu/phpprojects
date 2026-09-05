@@ -27,6 +27,8 @@
         let itemIndex = container.querySelectorAll('.item-row').length;
         const amountDisplay = document.getElementById('order-amount-display');
         const amountHidden = document.getElementById('order-amount-hidden');
+        // 商机表单的“金额”输入：跟随明细合计自动填，手改过（data-auto=0）就不再覆盖
+        const dealValueInput = document.getElementById('deal-value-input');
 
         function money(n) { return (window.CRM_PRODUCT_CURRENCY || '$') + n.toFixed(2); }
 
@@ -45,6 +47,9 @@
             totalEl.textContent = money(total);
             if (amountDisplay) amountDisplay.value = money(total);
             if (amountHidden) amountHidden.value = total.toFixed(2);
+            if (dealValueInput && dealValueInput.dataset.auto !== '0') {
+                dealValueInput.value = total > 0 ? total.toFixed(2) : '';
+            }
         }
 
         // 选中商品 → 名称/SKU/单位/单价回填本行。
@@ -76,6 +81,13 @@
             if (warn) warn.remove();
             calcTotal();
         });
+
+        // 用户手改“金额”→ 变成手动模式（此后加行/改行不再覆盖它）；清成 0/空则回到自动
+        if (dealValueInput) {
+            dealValueInput.addEventListener('input', function () {
+                this.dataset.auto = (this.value === '' || Number(this.value) === 0) ? '1' : '0';
+            });
+        }
 
         // 用户手改过名称/SKU 就不再自动覆盖
         container.addEventListener('input', function (ev) {
