@@ -61,6 +61,8 @@ CREATE TABLE IF NOT EXISTS app_settings (
 -- ---------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS customers (
     id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+    -- 稳定编号：AI 与人工引用记录时用它，比裸 id 好念也好核对（见 Model::publicCode()）
+    public_code               TEXT,
     name                      TEXT NOT NULL,
     company                   TEXT,
     email                     TEXT,
@@ -92,6 +94,7 @@ CREATE INDEX IF NOT EXISTS idx_customers_status ON customers(status);
 -- ---------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS leads (
     id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+    public_code               TEXT,
     customer_id               INTEGER,
     title                     TEXT NOT NULL,
     company                   TEXT,
@@ -130,6 +133,7 @@ CREATE INDEX IF NOT EXISTS idx_leads_lost ON leads(lost_reason);
 -- ---------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS deals (
     id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    public_code           TEXT,
     title                 TEXT NOT NULL,
     customer_id           INTEGER NOT NULL,
     value                 REAL NOT NULL DEFAULT 0.00,
@@ -256,6 +260,33 @@ CREATE TABLE IF NOT EXISTS attachments (
 CREATE INDEX IF NOT EXISTS idx_attachments_related ON attachments(related_type, related_id);
 
 -- ---------------------------------------------------------------
+-- 10. AI assistant audit trail (every instruction + plan + result)
+-- ---------------------------------------------------------------
+-- The AI never writes business data directly: it returns a plan of tool calls
+-- (plan_json) which PHP validates against Ai::tools() and the caller's own
+-- permissions, and — unless 自动执行 is turned on — only executes after the
+-- user confirms. This table is the paper trail for all of that.
+CREATE TABLE IF NOT EXISTS ai_actions (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER,
+    instruction  TEXT NOT NULL,
+    reply        TEXT,
+    plan_json    TEXT NOT NULL,
+    result_json  TEXT,
+    status       TEXT NOT NULL DEFAULT 'pending'
+                 CHECK (status IN ('pending','executed','cancelled','failed','invalid')),
+    error        TEXT,
+    provider     TEXT,
+    model        TEXT,
+    latency_ms   INTEGER,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    executed_at  TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_actions_user ON ai_actions(user_id, created_at);
+
+-- ---------------------------------------------------------------
 -- Triggers to emulate MySQL's ON UPDATE CURRENT_TIMESTAMP
 -- ---------------------------------------------------------------
 CREATE TRIGGER IF NOT EXISTS trg_customers_updated
@@ -319,7 +350,20 @@ INSERT OR IGNORE INTO app_settings (name, value) VALUES
 ('copyright_notice','© 2026 wayne · 叁程 CRM (Triphase CRM)'),
 ('currency_symbol', '$');
 
+-- 1c. AI assistant defaults. The API key is deliberately NOT seeded here:
+--     it lives in .env (AI_API_KEY, recommended) or in this table when entered
+--     on the 设置 → AI 页, and is never echoed back to the browser.
+INSERT OR IGNORE INTO app_settings (name, value) VALUES
+('ai_enabled',     '0'),
+('ai_provider',    'mock'),
+('ai_model',       ''),
+('ai_base_url',    ''),
+('ai_mode',        'preview'),
+('ai_temperature', '0.2');
+
 -- 2. Sample customers
+-- 注意：种子数据不引用 public_code —— 基线每次迁移都会重放（自愈），而老库要等增量 006 才有这一列；
+-- 编号统一由 007 回填（同一套 前缀 + 六位 id 规则，所以这里写不写结果一样）。
 INSERT OR IGNORE INTO customers (id, name, company, email, phone, whatsapp, source_country, source_city, first_purchase_from_china, has_import_capability, status, owner_id) VALUES
 (1, 'Jane Cooper', 'Acme Corp', 'jane@acme.com', '555-0101', '+1-555-0101', 'United States', 'New York', 0, 1, 'active', 1),
 (2, 'Robert Fox', 'Globex Inc', 'robert@globex.com', '555-0102', '+1-555-0102', 'Canada', 'Toronto', 1, 1, 'active', 1),

@@ -86,6 +86,17 @@ function textLength(string $text): int
     return strlen($text);
 }
 
+/**
+ * Clip a UTF-8 string to $limit characters, appending an ellipsis.
+ * Replaces mb_strimwidth(), which needs the mbstring extension.
+ */
+function textClip(string $text, int $limit, string $ell = '…'): string
+{
+    return textLength($text) <= $limit
+        ? $text
+        : textTrim($text, max(0, $limit - textLength($ell))) . $ell;
+}
+
 /** Cut a UTF-8 string to $limit characters (see textLength()). */
 function textTrim(string $text, int $limit): string
 {

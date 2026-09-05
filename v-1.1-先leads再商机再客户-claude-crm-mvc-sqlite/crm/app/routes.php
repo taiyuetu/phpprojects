@@ -39,8 +39,18 @@ $router->post('/leads/{id}/convert', 'LeadController@convert');
 $router->post('/leads/{id}/lost', 'LeadController@markLost');
 $router->post('/leads/{id}/reactivate', 'LeadController@reactivate');
 
+// ---- AI 助手 ----
+$router->get('/ai', 'AiController@index');
+$router->post('/ai/plan', 'AiController@plan');
+$router->post('/ai/apply', 'AiController@apply');
+$router->post('/ai/cancel', 'AiController@cancel');
+$router->get('/ai/history', 'AiController@history');
+$router->post('/ai/history/{id}/delete', 'AiController@destroyRequest');
+$router->post('/ai/test', 'AiController@test');
+
 // ---- Help ----
 $router->get('/help', 'HelpController@index');
+$router->get('/help/context', 'HelpController@context');
 
 // ---- Settings (应用信息 + 个人信息) ----
 $router->get('/settings', 'SettingController@index');

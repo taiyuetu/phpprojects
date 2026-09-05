@@ -6,6 +6,9 @@
 
 class Deal extends Model
 {
+    /** 商机编号：DEAL-000007（自动生成，供 AI 与人工稳定引用） */
+    protected ?string $publicCodePrefix = 'DEAL';
+
     protected string $table = 'deals';
 
     /** 未归档的商机（看板/列表用） */

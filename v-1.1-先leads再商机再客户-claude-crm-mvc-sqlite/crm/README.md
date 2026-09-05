@@ -22,6 +22,7 @@ directly to the MVC pattern.
 - **Settings** (`/settings`) — admins edit application info (system name, tagline, company, copyright notice, currency symbol)
   stored in `app_settings` and read through `appSetting()`/`money()`, so changes apply site-wide at once;
   everyone edits their own profile (name, email, 职位, phone, WhatsApp, notes) and password
+- **AI assistant** (`/ai`) — 21 whitelisted tool calls in three tiers. **read** (`search_records`, `get_record`): runs at once, never writes, and `app_settings`/`users` are not even on the searchable list, so an API key can never leak through it. **write** (create lead/customer/deal, add follow-up, `update_lead/customer/deal/order`): only the fields you named change, and ownership is re-checked at confirm time. **delete** (`delete_lead/deal/order/customer/ai_request`): demands `confirm:true` plus a one-line reason, shows its computed *blast radius* (how many child rows and attachment files go with it), is never auto-executed even in 自动执行 mode, a plan with ≥2 deletes must be backed by a query the system actually ran in that request (a live model really did guess nationalities from names), and the preview shows each record's country/status/stage so a human checks facts, not just ids, leaves a snapshot of the removed row in `ai_actions`, and is gated by the admin switch `ai_allow_delete` (or `AI_ALLOW_DELETE=0`). `Ai::complete()` is a bounded loop (max 3 rounds): if the model only knows a *condition* — “every customer in India”, “any customer named armtek and their leads/deals/orders” — it asks for a query, we run it for real (read-only), hand the found codes back as `<tool_results>`, and the model then writes the plan against rows that exist. The server also resolves names in your instruction into real IDs (`<found>`), so it never has to guess one. The **field list itself is generated from the DB schema** (`Ai::fieldsFor()` reading `Schema::columns()`), shared by the prompt, the validator and the writer — 22 lead columns, 19 customer, 11 order, 7 deal, 6 follow-up — so adding a column makes it writable instead of silently refusing (“this lead has no source_country field”, which is exactly what a hand-written list did). Writable means “any column you named”: omitted columns stay untouched, an empty string really clears a nullable column, NOT NULL ones refuse instead of corrupting, and `status=lost` / `stage` / `archived` also write their timestamps like the UI does. System-owned columns (`public_code`, `order_number`, timestamps, `owner_id` on insert) stay out via `Ai::PROTECTED_COLUMNS`. New tools: `update_follow_up`, `set_order_items` (whole-order line replacement; subtotal and order amount are recomputed by the server, never trusted from the model), and `get_settings` / `update_setting` (admin-only, one key per call, validated by the same `Setting::sanitize()` the settings page uses — API keys are excluded entirely and never echoed back). Every customer / lead / deal carries a **stable code** — `CUS-000007` / `LEAD-000007` / `DEAL-000007` (`public_code`, derived from its id and generated on create, shown in the lists and on the customer page) — and every `*_id` tool parameter accepts that code *or* the numeric id; orders keep using `order_number`. A code that doesn't resolve is refused instead of silently hitting a neighbouring row, and the code can never be supplied or rewritten by a caller. Everything is audited in `ai_actions`; providers: 内置演示模型 (offline), 本地 Ollama, OpenAI, DeepSeek, Kimi, 通义千问, 智谱, SiliconFlow or any OpenAI-compatible endpoint — configured in 设置 → AI 助手
 - **People are referenced by id only** — customers/leads/deals/orders store `owner_id`, follow-ups and
   activities `user_id`, attachments `uploaded_by`; the name is JOINed back on read, so a profile edit in
   Settings is instantly reflected everywhere that person appears as 负责人 (no denormalised copies)
@@ -74,6 +75,7 @@ Notes:
 ## Requirements
 
 - PHP 8.0+ with the `pdo_sqlite` extension enabled
+- `extension=openssl` as well if you use the AI assistant against an **https** provider (PHP streams need it; local Ollama / the offline demo model don't)
 - Apache with `mod_rewrite` (or adapt the two `.htaccess` files' rules for Nginx)
 
 ## Setup
@@ -127,9 +129,45 @@ controller pre-loading), attachment copy-on-convert, the migration tooling (fres
 build, idempotent re-run, legacy database upgrade) and an HTTP smoke test that
 logs in through the real Router → Controller → View stack.
 
+## Optional: enable the AI assistant
+
+The AI module ships **disabled**, and with the built-in 演示模型 you can exercise the whole flow without an account
+or network. Three settings decide how long you wait — 快速模式 (send the provider's
+"stop thinking, just answer" switch; measured 7.8 s + empty plan → 1.3 s + a valid `create_lead` on
+DeepSeek, and it falls back automatically when an endpoint rejects the parameter), 最大回复长度
+(`max_tokens`, the usual reason an answer drags) and 响应超时 (`ai_timeout`, default 45 s; PHP's own
+`max_execution_time` is raised around it so a slow model returns a readable hint instead of a Fatal error).
+To point it at a real model, open 设置 → AI 助手 (admins), pick a provider, set the model and key and hit
+“测试连接”. Environment values always win over the stored settings, which keeps secrets out of the database:
+
+```bash
+# .env  (see .env.example)
+AI_ENABLED=1
+AI_PROVIDER=openai            # mock | ollama | openai | deepseek | moonshot | dashscope | zhipu | siliconflow | custom
+AI_MODEL=deepseek-v4-flash   # or deepseek-v4-pro / qwen3.8-flash / qwen3.8-max / gpt-4o-mini
+AI_BASE_URL=https://api.openai.com/v1
+AI_API_KEY=***            # never echoed back to the browser, never written to logs
+AI_MODE=preview               # preview = 人确认后写库 (default) | auto
+```
+
+`openssl` must be enabled in `php.ini` (`extension=openssl`) for any **https** endpoint — this project talks to
+providers over PHP streams, so a trimmed PHP build cannot reach cloud models. 设置 → AI 助手 tells you up front
+which transports the current PHP has; 本地 Ollama (plain http on localhost) and the offline demo model need nothing.
+
+Before choosing a cloud provider: the instruction *plus a snapshot of the signed-in user's own customers / leads /
+deals ids* is sent to that API. Pick 本地 Ollama (or 内置演示模型) when data must stay in-house.
+
 The HTTP-level cases speak over plain PHP streams (`TestHttp` in
 `tests/bootstrap.php`), so the `curl` extension is **not** required — the only
 requirement is `allow_url_fopen`, which is on by default.
+
+## Documentation that writes itself
+
+`app/core/AppMap.php` builds a map of the app from the running code and database — registered routes,
+tables / columns / FKs / CHECK enums, settings keys, the AI tool whitelist and provider presets, and the
+test inventory. The 使用说明 page renders it, and **`GET /help/context`** serves the same map as plain
+text for handing to an LLM (it is also what the AI assistant gets in its system prompt). Change the code,
+and the docs change with it — `AppMapTest` fails if they ever disagree.
 
 ## Architecture notes
 
@@ -173,6 +211,9 @@ No other file needs to change — routing, DB access, and layout wrapping all co
 - All forms include CSRF tokens, verified on every POST/PUT/DELETE.
 - All SQL goes through PDO prepared statements.
 - Change `APP_ENV` to `production` in `config.php` before deploying (disables verbose error output).
+- The AI assistant cannot execute arbitrary SQL or tools: it answers with a JSON plan that is checked against a
+  hard-coded whitelist (`Ai::tools()`), the caller's data permissions, and value ranges, and every run is audited
+  in `ai_actions`. Written data always goes through the existing models, never through model-generated SQL.
 - Rotate the demo admin password (or delete the seed user) before using this beyond local development.
 
 ## 版权 / Copyright

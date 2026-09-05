@@ -37,7 +37,8 @@
             <?php endif; ?>
             <?php foreach ($leads as $l): ?>
                 <tr class="<?= $l['status'] === 'lost' ? 'table-light' : '' ?>">
-                    <td class="fw-semibold"><?= e($l['title']) ?></td>
+                    <td class="fw-semibold"><?= e($l['title']) ?>
+                        <div class="small text-muted fw-normal" title="稳定编号：对 AI 说这个就行"><?= e((new Lead())->codeOf($l)) ?></div></td>
                     <td><?= e($l['contact_name'] ?: '—') ?></td>
                     <td><?= e($l['source'] ?: '—') ?></td>
                     <td><?= money($l['value']) ?></td>

@@ -26,6 +26,33 @@ class User extends Model
         return $this->findBy('email', $email);
     }
 
+    /**
+     * 按姓名找用户 id（AI 的「负责人」参数允许写姓名）。
+     * 精确匹配优先；只有模糊匹配到唯一一个人时才用模糊结果——
+     * 同名的人不能猜，猜错了就是把客户交到别人手里。
+     */
+    public function idByName(string $name): int
+    {
+        $name = trim($name);
+        if ($name === '') {
+            return 0;
+        }
+        $exact = $this->db()->query('SELECT id FROM users WHERE name = :n ORDER BY id LIMIT 1')
+            ->bind(':n', $name)->single();
+        if ($exact) {
+            return (int) $exact['id'];
+        }
+        $like = $this->db()->query('SELECT id FROM users WHERE name LIKE :p ORDER BY id LIMIT 2')
+            ->bind(':p', '%' . $this->escapeLike($name) . '%')->resultSet();
+        return count($like) === 1 ? (int) $like[0]['id'] : 0;
+    }
+
+    /** 姓名里的通配符必须拆掉，否则一个 % 就能“模糊”到所有人 */
+    private function escapeLike(string $value): string
+    {
+        return str_replace(['%', '_', '[', ']'], '', $value);
+    }
+
     public function register(string $name, string $email, string $password, string $role = 'sales'): int
     {
         return $this->create([

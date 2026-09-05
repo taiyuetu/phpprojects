@@ -39,7 +39,8 @@
             <?php endif; ?>
             <?php foreach ($customers as $c): ?>
                 <tr>
-                    <td><a href="<?= url('/customers/' . $c['id']) ?>" class="fw-semibold text-decoration-none"><?= e($c['name']) ?></a></td>
+                    <td><a href="<?= url('/customers/' . $c['id']) ?>" class="fw-semibold text-decoration-none"><?= e($c['name']) ?></a>
+                        <div class="small text-muted" title="稳定编号：对 AI 说这个，报表里找这个"><?= e((new Customer())->codeOf($c)) ?></div></td>
                     <td><?= e($c['source_country'] ?: '—') ?></td>
                     <td><?= e($c['company'] ?: '—') ?></td>
                     <td><?= e($c['phone'] ?: '—') ?></td>

@@ -105,4 +105,51 @@ function test_static_helpers_reachable_in_cold_process(): void
     assertContains('.xlsx', Attachment::acceptAttribute(), 'Attachment autoloads');
 }
 
+/**
+ * This PHP build has no mbstring, and a bare "PHP + SQLite" install usually
+ * doesn't either: a stray mb_*() call is a fatal inside a view, not a warning.
+ * core/helpers.php is the single compat layer (textLength / textTrim / textClip),
+ * and it must keep every mb_* behind an explicit function_exists() check.
+ */
+function test_app_code_does_not_depend_on_mbstring(): void
+{
+    $names = ['mb_strlen(', 'mb_substr(', 'mb_strimwidth(', 'mb_strtoupper(', 'mb_strtolower(', 'mb_convert_encoding(', 'mb_internal_encoding('];
+
+    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(APP_PATH, FilesystemIterator::SKIP_DOTS));
+    foreach ($it as $file) {
+        if (strtolower($file->getExtension()) !== 'php') {
+            continue;
+        }
+        $path = $file->getPathname();
+        $isCompatLayer = strtolower($file->getBasename()) === 'helpers.php';
+        $src = (string) file_get_contents($path);
+        foreach (explode("
+", str_replace("
+", "
+", $src)) as $n => $line) {
+            $code = ltrim($line);
+            if (str_starts_with($code, '*') || str_starts_with($code, '/*')
+                || str_starts_with($code, '//') || str_starts_with($code, '#')) {
+                continue;                   // docblocks may name the functions they replace
+            }
+            foreach ($names as $call) {
+                if (!str_contains($line, $call)) {
+                    continue;
+                }
+                $name = rtrim($call, '(');
+                if ($isCompatLayer) {
+                    // The compat layer may call it, but only behind a guard.
+                    assertTrue(str_contains($src, "function_exists('" . $name . "')"),
+                        'helpers.php uses ' . $name . ' without ever checking function_exists for it');
+                    continue;
+                }
+                assertTrue(false, basename($path) . ':' . ($n + 1) . ' calls ' . $name
+                    . ' directly — use textLength()/textTrim()/textClip() instead');
+            }
+        }
+    }
+
+    assertTrue(true, 'no unguarded mb_* usage outside the compat layer');
+}
+
 runCase();

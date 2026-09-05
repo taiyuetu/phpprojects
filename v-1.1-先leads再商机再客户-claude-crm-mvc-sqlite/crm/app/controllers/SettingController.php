@@ -30,6 +30,9 @@ class SettingController extends Controller
             'definitions' => Setting::definitions(),
             'changes'     => (new Setting())->changes(),
             'references'  => $userModel->ownedReferences($userId),
+            'secrets'     => Setting::secretState(),
+            'aiConfig'    => AiClient::config(),
+            'aiDiag'      => AiClient::diagnostics(),
             'tab'         => $this->activeTab(),
             'csrf'        => $this->csrfToken(),
         ]);
@@ -53,9 +56,19 @@ class SettingController extends Controller
             return;
         }
 
+        // The AI key is a secret: an empty box means "keep it", so clearing needs
+        // an explicit checkbox, otherwise admins would wipe working keys by saving.
+        if (!empty($_POST['ai_api_key_clear'])) {
+            $clean['values']['ai_api_key'] = '';
+        }
+        unset($clean['values']['ai_api_key_clear']);
+
         (new Setting())->setMany($clean['values'], (int) $_SESSION['user_id']);
-        $this->setFlash('success', '应用信息已保存，并立即对全部页面生效。');
-        $this->redirect('/settings?tab=app');
+        $labels = Setting::definitions();
+        $first = reset($clean['values']);
+        $which = isset($_POST['ai_provider']) || isset($_POST['ai_enabled']) ? 'AI 设置' : '应用信息';
+        $this->setFlash('success', $which . '已保存，并立即对全部页面生效。');
+        $this->redirect('/settings?tab=' . ($which === 'AI 设置' ? 'ai' : 'app'));
     }
 
     /** Reset one or all app settings back to the code default. */
@@ -66,16 +79,29 @@ class SettingController extends Controller
 
         $key = trim((string) ($_POST['setting_key'] ?? ''));
         $defaults = Setting::defaults();
+        $defs     = Setting::definitions();
+        // 恢复默认按选项卡分组，且绝不因“重置”而默默吞掉已存的 API Key
+        // （密钥的清除只走“清除已保存的 API Key”那个勾选框）。
+        $group = ($_POST['setting_group'] ?? 'app') === 'ai' ? 'ai' : 'app';
+
         if ($key === 'all') {
-            (new Setting())->setMany($defaults, (int) $_SESSION['user_id']);
-            $this->setFlash('success', '应用信息已恢复为默认值。');
-        } elseif (isset($defaults[$key])) {
+            $reset = [];
+            foreach (Setting::keysInGroup($group) as $name) {   // secrets excluded
+                $reset[$name] = $defaults[$name];
+            }
+            (new Setting())->setMany($reset, (int) $_SESSION['user_id']);
+            $this->setFlash('success', ($group === 'ai' ? 'AI 设置' : '应用信息') . '已恢复为默认值。');
+            $this->redirect('/settings?tab=' . ($group === 'ai' ? 'ai' : 'app'));
+            return;
+        }
+
+        if (isset($defaults[$key])) {
             (new Setting())->setMany([$key => $defaults[$key]], (int) $_SESSION['user_id']);
-            $this->setFlash('success', '「' . Setting::definitions()[$key]['label'] . '」已恢复为默认值。');
+            $this->setFlash('success', '「' . $defs[$key]['label'] . '」已恢复为默认值。');
         } else {
             $this->setFlash('error', '未知的设置项。');
         }
-        $this->redirect('/settings?tab=app');
+        $this->redirect('/settings?tab=' . (($defs[$key]['group'] ?? 'app') === 'ai' ? 'ai' : 'app'));
     }
 
     /** ---- 个人信息 (self-service) ---- */
@@ -142,9 +168,9 @@ class SettingController extends Controller
     private function activeTab(): string
     {
         $tab = trim((string) ($_GET['tab'] ?? ''));
-        if ($tab === 'app' && !isAdmin()) {
+        if (in_array($tab, ['app', 'ai'], true) && !isAdmin()) {
             $tab = '';
         }
-        return in_array($tab, ['app', 'profile', 'password'], true) ? $tab : 'profile';
+        return in_array($tab, ['app', 'ai', 'profile', 'password'], true) ? $tab : 'profile';
     }
 }

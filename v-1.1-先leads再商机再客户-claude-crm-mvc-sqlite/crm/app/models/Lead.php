@@ -6,6 +6,9 @@
 
 class Lead extends Model
 {
+    /** 线索编号：LEAD-000007（自动生成，供 AI 与人工稳定引用） */
+    protected ?string $publicCodePrefix = 'LEAD';
+
     protected string $table = 'leads';
 
     /** All leads, newest first, optional status filter. */

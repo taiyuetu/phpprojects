@@ -48,7 +48,7 @@ define('APP_COPYRIGHT', 'Copyright (c) ' . APP_COPY_YEAR . ' ' . APP_AUTHOR . ' 
 // Short form for the UI (sidebar / login page).
 define('APP_COPYRIGHT_UI', '© ' . APP_COPY_YEAR . ' ' . APP_AUTHOR . ' · ' . APP_NAME . ' (' . APP_NAME_EN . ')');
 define('APP_RIGHTS', '保留所有权利 / All rights reserved.');
-define('APP_VERSION', '1.3.0');
+define('APP_VERSION', '1.8.0');
 define('APP_ENV', getenv('APP_ENV') ?: 'development'); // development | production
 define('APP_DEBUG', APP_ENV === 'development');
 

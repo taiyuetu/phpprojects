@@ -122,6 +122,7 @@ function test_all_main_pages_respond_200(): void
             '/deals', '/deals/create', '/deals/1/edit', '/deals/archived',
             '/orders', '/orders/create', '/orders/1', '/orders/1/edit', '/help',
             '/settings', '/settings?tab=app', '/settings?tab=profile', '/settings?tab=password',
+            '/settings?tab=ai', '/ai', '/ai/history',
             // The "已流失" tab is the only leads tab that carries the 流失原因
             // column — walk it so a th/td mismatch surfaces as a non-200 or via
             // the column assertions below.
@@ -131,7 +132,34 @@ function test_all_main_pages_respond_200(): void
         foreach ($pages as $page) {
             $res = $http->get($base . $page);
             assertTrue($res['code'] === 200, "{$page} returns HTTP 200 (got {$res['code']})");
+            // A file header that escaped php mode shows up as a stray doc block
+            // comment — this actually happened once, hence the explicit guard.
+            assertTrue(!preg_match('~^\s*/\*\*\s*\R\s*\*\s*Copyright~m', $res['body']),
+                "{$page} does not leak a source-file header comment into the page");
         }
+
+        // 使用说明页的技术参考区必须是实时生成的真数据，且不能漏掉文档承诺的内容。
+        $help = $http->get($base . '/help')['body'];
+        foreach (['技术参考' => 'tech section', '数据字典' => 'data dictionary heading',
+                  'leads.status' => 'live enum from CHECK', 'ai_actions' => 'AI audit table documented',
+                  'deepseek-v4-flash' => 'AI preset model ids',
+                  'canManageResource' => 'ownership/permission rule spelled out',
+                  'faqAccordion' => 'FAQ block intact', 'help/context' => 'link to the text map'] as $needle => $what) {
+            assertContains($needle, $help, "help page documents the {$what}");
+        }
+        assertTrue(substr_count($help, '<div') === substr_count($help, '</div>'),
+            'help page HTML is balanced (' . substr_count($help, '<div') . '/' . substr_count($help, '</div') . ')');
+        assertTrue(!str_contains($help, '<?'), 'help page never leaks raw PHP');
+
+        // The plain-text map an AI can be handed.
+        $ctx = $http->get($base . '/help/context');
+        assertEquals(200, $ctx['code'], 'context endpoint answers');
+        assertContains('## 业务与流程', $ctx['body'], 'context opens with the business flows');
+        assertContains('线索 lead → 商机 deal', $ctx['body'], 'the flow chain is stated');
+        foreach (['customers', 'leads', 'deals', 'orders', 'ai_actions', '/customers/{id}', 'POST', 'CSRF'] as $needle) {
+            assertContains($needle, $ctx['body'], "context covers {$needle}");
+        }
+        assertTrue(strpos($ctx['body'], 'sk-') === false, 'context contains no API keys');
 
         // Column contract of the leads list: 流失原因 only on the "已流失" tab.
         $lostTab = $http->get($base . '/leads?status=lost')['body'];
@@ -229,6 +257,201 @@ function test_settings_page_syncs_profile_into_customer_owner(): void
         $afterHijack = $http->get($base . '/')['body'];
         assertContains('环球贸易 CRM', $afterHijack, 'a non-admin cannot overwrite app settings');
         assertTrue(!str_contains($afterHijack, '劫持名称'), 'the rejected value was not stored');
+    });
+}
+
+/**
+ * The delete rails over real HTTP, using the offline demo model so no key and no
+ * network is involved: queries answer immediately, deletes wait for a human,
+ * show their blast radius, and only then take data down.
+ */
+function test_ai_deletes_wait_for_a_human_and_show_what_they_take(): void
+{
+    withTestServer('ai', function (TestHttp $http, string $base, string $csrf): void {
+        (new Setting())->setMany(['ai_enabled' => '1', 'ai_provider' => 'mock', 'ai_mode' => 'preview',
+            'ai_allow_delete' => '1'], 1);
+
+        $custId = (int) (new Customer())->create(['name' => '联盛机械采购部', 'company' => '联盛机械',
+            'status' => 'active', 'owner_id' => 1]);
+        $leadId = (int) (new Lead())->create(['title' => '轴承询盘', 'company' => '联盛机械',
+            'contact_name' => '林小姐', 'status' => 'new', 'owner_id' => 1, 'customer_id' => $custId]);
+        $db = Database::connection();
+
+        // 1) a pure query: runs at once, changes nothing, and the answer is on the page
+        $http->post($base . '/ai/plan', ['csrf_token' => $csrf, 'instruction' => '查一下 联盛']);
+        $q = $db->query("SELECT * FROM ai_actions ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+        assertEquals('executed', $q['status'], '只查不改的请求当场就结束了');
+        $page = $http->get($base . '/ai?plan=' . $q['id'])['body'];
+        assertContains('未改动任何数据', $page, '页面说清楚这只是查询');
+        assertContains('LEAD-' . sprintf('%06d', $leadId), $page, '结果里带真实编号');
+        assertEquals(1, (int) $db->query('SELECT COUNT(*) FROM leads')->fetchColumn(), '一行数据都没动');
+
+        // 2) a delete: it must NOT execute itself
+        $http->post($base . '/ai/plan', ['csrf_token' => $csrf, 'instruction' => '删掉线索 #' . $leadId]);
+        $d = $db->query("SELECT * FROM ai_actions ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+        assertEquals('pending', $d['status'], '删除停在待确认');
+        assertTrue((int) $db->query('SELECT COUNT(*) FROM leads WHERE id = ' . $leadId)->fetchColumn() === 1,
+            '计划生成阶段绝对不删数据');
+        $preview = $http->get($base . '/ai?plan=' . $d['id'])['body'];
+        assertContains('将删除 1 条记录', $preview, '页顶橙色警告给出条数');
+        assertContains('合计约', $preview, '并给出合计影响');
+        assertContains('将删除', $preview, '并列出要删哪一条');
+        assertContains('轴承询盘', $preview, '带标题，不只是一串 ID');
+        assertContains('确认执行（含删除）', $preview, '按钮上写明含删除');
+
+        // 3) auto 模式也拦不住？一一拦得住：删除不参与自动执行
+        (new Setting())->setMany(['ai_mode' => 'auto'], 1);
+        $http->post($base . '/ai/plan', ['csrf_token' => $csrf, 'instruction' => '删掉线索 #' . $leadId]);
+        $auto = $db->query("SELECT * FROM ai_actions ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+        assertEquals('pending', $auto['status'], '开了自动执行，删除依旧等人工确认');
+        assertTrue((int) $db->query('SELECT COUNT(*) FROM leads WHERE id = ' . $leadId)->fetchColumn() === 1,
+            '数据仍然完好');
+        (new Setting())->setMany(['ai_mode' => 'preview'], 1);
+
+        // 4) the master switch refuses it outright
+        (new Setting())->setMany(['ai_allow_delete' => '0'], 1);
+        $http->post($base . '/ai/plan', ['csrf_token' => $csrf, 'instruction' => '删掉线索 #' . $leadId]);
+        $off = $db->query("SELECT * FROM ai_actions ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+        assertEquals('failed', $off['status'], '总开关关掉后不会生成可执行计划');
+        assertContains('删除权限已关闭', (string) $off['error']);
+        $blocked = $http->get($base . '/ai?plan=' . $off['id'])['body'];
+        assertTrue(!str_contains($blocked, '确认执行（含删除）'), '被拒的删除不给确认按钮');
+        (new Setting())->setMany(['ai_allow_delete' => '1'], 1);
+
+        // 5) the human confirms -> it goes, with a snapshot left behind
+        $http->post($base . '/ai/apply', ['csrf_token' => $csrf, 'id' => $d['id']]);
+        assertEquals(0, (int) $db->query('SELECT COUNT(*) FROM leads WHERE id = ' . $leadId)->fetchColumn(),
+            '确认之后才真的删');
+        $done = $db->query('SELECT status, result_json FROM ai_actions WHERE id = ' . (int) $d['id'])->fetch(PDO::FETCH_ASSOC);
+        assertEquals('executed', $done['status']);
+        assertContains('轴承询盘', (string) $done['result_json'], '被删内容留了快照');
+        assertContains('title=', (string) $done['result_json'], '快照存的是被删那一行的字段');
+        assertContains('理由', (string) $done['result_json'], '连由一起存着');
+
+        // 6) the audit row itself can be dropped afterwards, by a human this time
+        $history = $http->get($base . '/ai/history')['body'];
+        assertContains('/ai/history/' . (int) $d['id'] . '/delete', $history, '记录页有删除入口');
+        $http->post($base . '/ai/history/' . (int) $d['id'] . '/delete', ['csrf_token' => $csrf]);
+        assertEquals(0, (int) $db->query('SELECT COUNT(*) FROM ai_actions WHERE id = ' . (int) $d['id'])->fetchColumn(),
+            '确认过的记录能被删掉');
+
+        (new Setting())->setMany(['ai_enabled' => '0', 'ai_provider' => 'mock', 'ai_mode' => 'preview',
+            'ai_allow_delete' => '1'], 1);
+    });
+}
+
+
+/**
+ * The AI safety model over the real HTTP stack: enabling it is an admin action,
+ * 预览确认 writes nothing until 确认执行 is posted, and the offline demo
+ * provider keeps the test free of keys and network calls.
+ */
+function test_ai_preview_then_confirm_writes_data_once(): void
+{
+    withTestServer('ai', function (TestHttp $http, string $base, string $csrf): void {
+        // Off by default: the page explains itself and refuses to run.
+        $off = $http->get($base . '/ai');
+        assertContains('未启用', $off['body'], 'AI ships disabled');
+        $blocked = $http->post($base . '/ai/plan', ['csrf_token' => $csrf, 'instruction' => '新建线索：测试']);
+        assertTrue(!str_contains($blocked['body'], '确认执行'), 'a disabled assistant produces no runnable plan');
+
+        // Admin turns on the offline demo provider in 预览确认 mode.
+        $http->post($base . '/settings/app', [
+            'csrf_token'     => $csrf,
+            'ai_enabled'     => '1',
+            'ai_provider'    => 'mock',
+            'ai_mode'        => 'preview',
+            'ai_model'       => '',
+            'ai_base_url'    => '',
+            'ai_temperature' => '0.2',
+        ]);
+        $on = $http->get($base . '/settings?tab=ai')['body'];
+        assertContains('已启用', $on, 'the page reports the new state');
+        assertContains('演示模型', $on, 'and the chosen offline provider');
+
+        // The wait state: the page must show the time budget it is about to use.
+        $aiOn = $http->get($base . '/ai')['body'];
+        assertContains('id="ai-plan-form"', $aiOn, 'the wait-state script has a form to bind');
+        assertContains('data-budget="45"', $aiOn, 'the configured timeout reaches the submit button');
+        assertContains('超时 45s', $aiOn, 'and is visible as a badge');
+        assertContains('≤800 tokens', $aiOn, 'the answer cap is visible too');
+
+        // Ask for a lead. Preview must not create it.
+        $http->post($base . '/ai/plan', [
+            'csrf_token'  => $csrf,
+            'instruction' => '新建线索：联系人 林小姐，公司 联盛机械，邮箱 lin@liansheng.com，'
+                . '电话 +8613800001111，预计金额 25000 美元，来源 WhatsApp',
+        ]);
+        $db = Database::connection();
+        $row = $db->query('SELECT * FROM ai_actions ORDER BY id DESC LIMIT 1')->fetch(PDO::FETCH_ASSOC);
+        assertTrue(is_array($row), 'the request was audited');
+        assertEquals('pending', $row['status'], 'the plan waits for confirmation');
+        $planned = (int) $db->query("SELECT COUNT(*) FROM leads WHERE contact_email = 'lin@liansheng.com'")->fetchColumn();
+        assertEquals(0, $planned, 'previewing wrote no lead');
+
+        $plan = $http->get($base . '/ai?plan=' . $row['id'])['body'];
+        assertContains('新建线索', $plan, 'the plan card names the action');
+        assertContains('lin@liansheng.com', $plan, 'and shows the arguments it will use');
+        assertContains('确认执行', $plan, 'behind a human confirmation button');
+
+        // Confirm once -> exactly one lead.
+        $http->post($base . '/ai/apply', ['csrf_token' => $csrf, 'id' => $row['id']]);
+        $leads = $db->query("SELECT * FROM leads WHERE contact_email = 'lin@liansheng.com'")->fetchAll(PDO::FETCH_ASSOC);
+        assertEquals(1, count($leads), 'the lead exists once, after confirmation');
+        assertEquals('联盛机械', $leads[0]['company'], 'fields landed as planned');
+        assertEquals(25000.0, (float) $leads[0]['value'], 'money parsed');
+        assertEquals(1, (int) $leads[0]['owner_id'], 'owned by the person who asked');
+
+        // Replaying the confirmation must not duplicate the write.
+        $http->post($base . '/ai/apply', ['csrf_token' => $csrf, 'id' => $row['id']]);
+        assertEquals(1, (int) $db->query("SELECT COUNT(*) FROM leads WHERE contact_email = 'lin@liansheng.com'")->fetchColumn(),
+            'an executed plan cannot be applied twice');
+        $done = $db->query('SELECT status FROM ai_actions WHERE id = ' . (int) $row['id'])->fetch(PDO::FETCH_ASSOC);
+        assertEquals('executed', $done['status'], 'the audit row shows it ran');
+        assertContains('已执行', $http->get($base . '/ai/history')['body'], 'and is visible in 操作记录');
+
+        // Leave the shipped default in place for any later case in this process.
+        (new Setting())->setMany(['ai_enabled' => '0', 'ai_provider' => 'mock', 'ai_mode' => 'preview'], 1);
+    });
+}
+
+/**
+ * 稳定编号要看得见：人得能拿页面上的编号去核对/指给 AI 看。
+ * 顺带验一下历史行没回填时也不留白（Model::codeOf 推导）。
+ */
+function test_stable_codes_are_visible_on_the_pages(): void
+{
+    withTestServer('codes', function (TestHttp $http, string $base, string $csrf): void {
+        $db = Database::connection();
+        // 本用例文件会 resetData()清掉种子行，所以自己建记录（编号由 create() 自动生成）
+        $custId = (int) (new Customer())->create(['name' => '编号可见客户', 'company' => '可见公司',
+            'status' => 'active', 'owner_id' => 1]);
+        $leadId = (int) (new Lead())->create(['title' => '编号可见线索', 'status' => 'new', 'owner_id' => 1]);
+        $dealId = (int) (new Deal())->create(['title' => '编号可见商机', 'customer_id' => $custId, 'owner_id' => 1]);
+        $custCode = 'CUS-' . sprintf('%06d', $custId);
+        $leadCode = 'LEAD-' . sprintf('%06d', $leadId);
+        $dealCode = 'DEAL-' . sprintf('%06d', $dealId);
+        assertTrue($custId > 0 && $leadId > 0 && $dealId > 0, '三条记录建好了');
+
+        assertContains($custCode, $http->get($base . '/customers')['body'], '客户列表带编号');
+        assertContains($custCode, $http->get($base . '/customers/' . $custId)['body'], '客户详情带编号');
+        assertContains($leadCode, $http->get($base . '/leads')['body'], '线索列表带编号');
+        assertContains($dealCode, $http->get($base . '/deals')['body'], '商机看板带编号');
+
+        // 把编号抹空（模拟还没跑 007 的老库），界面仍不该出现空白或 '--'
+        $db->query('UPDATE leads SET public_code = NULL WHERE id = ' . $leadId)->execute();
+        assertContains($leadCode, $http->get($base . '/leads')['body'],
+            '空编号由 Model::codeOf() 按同一规则推导，不会留白');
+        // 而且 AI 拿空编号的行也能用数字 ID 正常操作
+        // （注意：HTTP 登录发生在子进程里，本进程的归属检查要看自己的 session）
+        $prevUser = $_SESSION['user_id'] ?? null;
+        $_SESSION['user_id'] = 1;
+        $_SESSION['user'] = ['id' => 1, 'role' => 'admin'];
+        $plan = Ai::validatePlan([['tool' => 'update_lead', 'args' => ['lead_id' => (string) $leadId, 'notes' => '空编号行']]], 1);
+        assertEquals(false, $plan['blocked'], implode('；', $plan['errors']));
+        if ($prevUser === null) {
+            unset($_SESSION['user_id'], $_SESSION['user']);
+        }
     });
 }
 

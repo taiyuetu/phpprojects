@@ -34,7 +34,7 @@ $columns = [
                 <?php foreach ($stages[$key] as $d): ?>
                     <div class="deal-card">
                         <div class="fw-semibold"><?= e($d['title']) ?></div>
-                        <div class="small text-muted mb-2"><?= e($d['customer_name'] ?? '—') ?></div>
+                        <div class="small text-muted"><?= e((new Deal())->codeOf($d)) ?></div>
                         <div class="d-flex justify-content-between align-items-center">
                             <span class="fw-semibold"><?= money($d['value']) ?></span>
                             <div>

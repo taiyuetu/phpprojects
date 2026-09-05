@@ -101,6 +101,20 @@ function test_app_setting_survives_a_missing_table(): void
     assertEquals($before['app_name'], appSetting('app_name'), 'reads fine again');
 }
 
+function test_resetting_one_tab_cannot_wipe_another_tabs_settings(): void
+{
+    // 应用信息 与 AI 助手 各自一个“恢复默认”，互不影响；密钥永远不会被重置掉。
+    $app = Setting::keysInGroup('app');
+    $ai  = Setting::keysInGroup('ai');
+    assertTrue(in_array('app_name', $app, true), 'app_name belongs to the app tab');
+    assertTrue(in_array('ai_mode', $ai, true), 'ai_mode belongs to the AI tab');
+    assertTrue(!in_array('ai_mode', $app, true), 'the AI tab is not part of the app tab');
+    assertTrue(!in_array('app_name', $ai, true), 'the app tab is not part of the AI tab');
+    assertTrue(!in_array('ai_api_key', $ai, true), 'a secret is never included in a reset');
+    assertTrue(in_array('ai_api_key', Setting::keysInGroup('ai', true), true),
+        'and is only listed when secrets are explicitly allowed');
+}
+
 // ------------------------------------------------------- profile + ownership sync
 
 function test_profile_edit_is_visible_as_customer_owner(): void

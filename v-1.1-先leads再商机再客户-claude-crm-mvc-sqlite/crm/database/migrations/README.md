@@ -36,5 +36,29 @@
   旧数据库缺列时仍会正常执行。因此“同步修改 schema.sql”不会造成
   `duplicate column name` 报错。
 - 含建表/重建表/改 CHECK 等其它语句的增量文件**不会**被自动跳过，会原样执行。
+
+## 需要回填或要 UNIQUE 的列：拆成两个增量，并且种子不要引用它
+
+给既有表加一个「历史行要回填、而且必须唯一」的列时（例：`006`/`007` 的 `public_code`），
+单靠一个文件做不到，因为：
+
+1. SQLite 的 `ALTER TABLE ... ADD COLUMN` **不能带 `UNIQUE`**，唯一性只能事后建索引；
+2. 而 `migrate.php` 每次都会**重放基线**（自愈），所以基线里的种子数据
+   （`INSERT OR IGNORE INTO …`）**绝对不能引用只有增量才带来的列**：
+   旧库上那一列还不存在，重放基线会直接
+   `table customers has no column named public_code` 整体失败（本次开发真的撞到过）。
+
+所以分成两步：
+
+| 文件 | 内容 | 新库 | 老库 |
+| --- | --- | --- | --- |
+| `006_add_public_code_to_core_tables.sql` | 通篇只有 `ADD COLUMN`（不带 UNIQUE） | 自动 `skipped` | 正常执行，补列 |
+| `007_backfill_public_code.sql` | 先 `UPDATE … WHERE public_code IS NULL` 回填，再 `CREATE UNIQUE INDEX IF NOT EXISTS` | 执行（把基线留下的 NULL 补上） | 执行（把刚补的 NULL 补上） |
+
+基线里该列只声明为普通 `TEXT`，列的存在形式与老库补列后的结果一致；
+历史行即使在回填前也不能在界面上留白，靠 `Model::codeOf()` 按同一规则推导兼容。
+
+回归由 `tests/cases/PublicCodeTest.php::test_the_migrations_backfill_and_stay_idempotent` 守住：
+它用“剥掉新列声明的基线”现场造一个伪老库，真跑 `migrate.php` 验补列→回填→唯一索引→重跑幂等。
 - 增量文件最好写成可重复执行的安全形式（先判断列/表是否存在），
   防止脚本记录与实际执行不一致时出错。

@@ -6,6 +6,9 @@
 
 class Customer extends Model
 {
+    /** 客户编号：CUS-000007（自动生成，供 AI 与人工稳定引用） */
+    protected ?string $publicCodePrefix = 'CUS';
+
     protected string $table = 'customers';
 
     /** All customers with their owner's name, newest first, optional search. */

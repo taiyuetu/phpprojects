@@ -43,6 +43,9 @@
             <a href="<?= url('/help') ?>" class="<?= str_contains($_SERVER['REQUEST_URI'], '/help') ? 'active' : '' ?>">
                 <i class="bi bi-question-circle"></i> 使用说明
             </a>
+            <a href="<?= url('/ai') ?>" class="<?= str_contains($_SERVER['REQUEST_URI'], '/ai') ? 'active' : '' ?>">
+                <i class="bi bi-robot"></i> AI 助手
+            </a>
             <a href="<?= url('/settings') ?>" class="<?= str_contains($_SERVER['REQUEST_URI'], '/settings') ? 'active' : '' ?>">
                 <i class="bi bi-gear-fill"></i> 设置
             </a>

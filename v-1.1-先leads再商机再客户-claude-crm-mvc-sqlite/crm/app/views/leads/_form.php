@@ -1,9 +1,9 @@
-<?php $l = $old ?? $lead ?? []; ?>
-
+<?php
 /**
  * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
  */
-
+$l = $old ?? $lead ?? [];
+?>
 <div class="row g-3 mb-3">
     <div class="col-md-12">
         <label class="form-label">线索标题 *</label>

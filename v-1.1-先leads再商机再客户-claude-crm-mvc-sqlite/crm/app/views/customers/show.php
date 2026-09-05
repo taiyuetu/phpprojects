@@ -10,7 +10,9 @@ $relatedId = (int) $customer['id'];
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h3 class="mb-0"><?= e($customer['name']) ?></h3>
+        <h3 class="mb-0"><?= e($customer['name']) ?>
+            <span class="badge bg-light text-muted border align-middle fs-6" title="稳定编号：与 AI 说同一条记录时用它"><?= e((new Customer())->codeOf($customer)) ?></span>
+        </h3>
         <div class="text-muted"><?= e($customer['company'] ?: '') ?></div>
     </div>
     <div class="d-flex gap-2">

@@ -40,6 +40,12 @@ class Router
         $this->routes['DELETE'][$path] = $handler;
     }
 
+    /** The registered route table; AppMap reads it so docs cannot drift from code. */
+    public function all(): array
+    {
+        return $this->routes;
+    }
+
     /** Allow HTML forms to fake PUT/DELETE via a hidden _method field. */
     private function resolveMethod(): string
     {

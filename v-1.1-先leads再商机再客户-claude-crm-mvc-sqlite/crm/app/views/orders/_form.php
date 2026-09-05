@@ -1,9 +1,9 @@
-<?php $o = $old ?? $order ?? []; ?>
-
+<?php
 /**
  * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
  */
-
+$o = $old ?? $order ?? [];
+?>
 <div class="row g-3 mb-3">
     <div class="col-md-6">
         <label class="form-label">订单编号 *</label>
