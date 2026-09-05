@@ -173,6 +173,8 @@ CREATE TABLE IF NOT EXISTS deals (
     value                 REAL NOT NULL DEFAULT 0.00,
     stage                 TEXT NOT NULL DEFAULT 'open' CHECK (stage IN ('open','proposal','negotiation','closed_won','closed_lost')),
     close_date            TEXT,
+    -- 未成交阶段的明细行草稿（JSON；成交后清空，明细交给自动生成的订单）
+    draft_items           TEXT,
     stage_open_at         TEXT,
     stage_proposal_at     TEXT,
     stage_negotiation_at  TEXT,

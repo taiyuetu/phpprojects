@@ -63,6 +63,35 @@ class Deal extends Model
         )->bind(':id', $dealId)->resultSet();
     }
 
+    // ------------------------------------------------------------- 明细草稿
+
+    /**
+     * 成交前手填的明细行草稿（deals.draft_items，JSON）。
+     *
+     * 商机在未成交时并不生成订单，明细行只在“保存为成交”的那一刻才变成订单明细；
+     * 但用户往往想先录入、后面再关单，所以未成交阶段的行先存在这里，
+     * 编辑时原样带回，成交时转成订单并清空。
+     * 一旦商机已有关联订单，明细的单一事实来源就是订单行，草稿不再使用。
+     */
+    public function draftItems(int $dealId): array
+    {
+        $row = $this->db()->query('SELECT draft_items FROM deals WHERE id = :id')
+            ->bind(':id', $dealId)->single();
+        if (!$row || trim((string) ($row['draft_items'] ?? '')) === '') {
+            return [];
+        }
+        $decoded = json_decode((string) $row['draft_items'], true);
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    /** 保存未成交阶段的明细行草稿；空数组表示清除。 */
+    public function setDraftItems(int $dealId, array $items): void
+    {
+        $this->db()->query('UPDATE deals SET draft_items = :d WHERE id = :id')
+            ->bind(':d', $items ? json_encode(array_values($items), JSON_UNESCAPED_UNICODE) : null)
+            ->bind(':id', $dealId)->execute();
+    }
+
     /** 归档商机 */
     public function archive(int $id): bool
     {

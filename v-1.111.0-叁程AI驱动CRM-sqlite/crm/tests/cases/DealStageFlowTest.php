@@ -305,4 +305,116 @@ function test_create_and_save_open_deal_without_products(): void
     }
 }
 
+/**
+ * 回归：商机明细行“选了就保存”。
+ * - 未成交的商机保存时行存入草稿，重新打开编辑页还在；
+ * - 推进到成交时，行变成订单明细并清空草稿；
+ * - 已成交的商机再改行（保持在成交状态）会同步进它名下那张订单。
+ */
+function test_open_deal_lines_persist_then_become_order_and_stay_in_sync(): void
+{
+    $c = new Customer();
+    $custId = $c->create(['id' => 21, 'name' => '明细持久客户', 'status' => 'active']);
+    $productId = (int) (new Product())->create(['name' => '轴承6206', 'sku' => 'B6206',
+        'unit' => '件', 'price' => 55, 'status' => 'active', 'owner_id' => 1]);
+    $dealId = (int) (new Deal())->create(['id' => 21, 'title' => '持久化商机', 'customer_id' => (int) $custId,
+        'stage' => 'open', 'value' => 110, 'owner_id' => 1]);
+
+    $publicDir = BASE_PATH . '/public';
+    $envFile = BASE_PATH . '/.env';
+    $hadEnv = file_exists($envFile);
+    $envBackup = $hadEnv ? file_get_contents($envFile) : '';
+    file_put_contents($envFile, 'DB_PATH=' . $GLOBALS['TEST_DB_PATH'] . PHP_EOL);
+    $restoreEnv = function () use ($envFile, $hadEnv, $envBackup): void {
+        if ($hadEnv) {
+            file_put_contents($envFile, $envBackup);
+        } else {
+            @unlink($envFile);
+        }
+    };
+
+    $proc = null;
+    try {
+        $port = random_int(18000, 18999);
+        $serverCmd = escapeshellarg(PHP_BINARY) . ' -S 127.0.0.1:' . $port
+            . ' -t ' . escapeshellarg($publicDir);
+        $proc = proc_open($serverCmd, [
+            0 => ['pipe', 'r'],
+            1 => ['file', sys_get_temp_dir() . '/crm_persist.log', 'w'],
+            2 => ['file', sys_get_temp_dir() . '/crm_persist.err', 'w'],
+        ], $pipes, $publicDir);
+        assertTrue(is_resource($proc), 'built-in server started');
+
+        $base = "http://127.0.0.1:{$port}";
+        $http = new TestHttp();
+        $up = false;
+        for ($i = 0; $i < 30; $i++) {
+            if ($http->reachable($base . '/login')) {
+                $up = true;
+                break;
+            }
+            usleep(100000);
+        }
+        assertTrue($up, 'server reachable');
+
+        $csrf = startServerAndLogin($http, $base);
+        $row = function (int $n, float $qty) use ($productId) {
+            return [['product_id' => (string) $productId, 'product_name' => '轴承6206',
+                'quantity' => (string) $qty, 'unit_price' => '55', 'unit' => '件']];
+        };
+
+        // 1) 未成交阶段：选一行商品保存（进行中，不开单）
+        $code = putDeal($http, $base, $csrf, $dealId, [
+            'title' => '持久化商机', 'customer_id' => 21, 'value' => '110',
+            'stage' => 'open', 'close_date' => '', 'items' => $row(1, 2),
+        ]);
+        assertEquals(200, $code, '开放商机带明细保存成功');
+
+        // 行必须进了草稿；重新打开编辑页要能看见选中了那件商品
+        $deal = dbDeal($dealId);
+        assertTrue(!empty($deal['draft_items']) && str_contains((string) $deal['draft_items'], (string) $productId),
+            '明细行已存入草稿');
+        assertTrue(!(new Order())->byDeal($dealId), '未成交不生成订单');
+        $editAgain = $http->get($base . '/deals/' . $dealId . '/edit')['body'];
+        assertContains('data-selected="' . $productId . '"', $editAgain, '重新打开时那件商品仍是选中的');
+
+        // 2) 推进到成交：行变成订单明细，草稿清空
+        $code = putDeal($http, $base, $csrf, $dealId, [
+            'title' => '持久化商机', 'customer_id' => 21, 'value' => '110',
+            'stage' => 'closed_won', 'close_date' => '', 'items' => $row(1, 2),
+        ]);
+        assertEquals(200, $code, '成交保存成功');
+        $orders = (new Order())->byDeal($dealId);
+        assertEquals(1, count($orders), '成交生成了一张订单');
+        $orderItems = (new OrderItem())->byOrder((int) $orders[0]['id']);
+        assertEquals(1, count($orderItems), '订单有一条明细');
+        assertEquals(2.0, (float) $orderItems[0]['quantity'], '数量 2 同步到订单');
+        $deal = dbDeal($dealId);
+        assertTrue(empty($deal['draft_items']), '成交后草稿清空');
+
+        // 3) 已成交商机继续改行（保持成交，不开新单）：订单明细必须跟着变
+        $code = putDeal($http, $base, $csrf, $dealId, [
+            'title' => '持久化商机', 'customer_id' => 21, 'value' => '110',
+            'stage' => 'closed_won', 'close_date' => '', 'items' => $row(1, 7),
+        ]);
+        assertEquals(200, $code, '成交状态再保存成功');
+        $orders = (new Order())->byDeal($dealId);
+        assertEquals(1, count($orders), '不重复开单');
+        $orderItems = (new OrderItem())->byOrder((int) $orders[0]['id']);
+        assertEquals(7.0, (float) $orderItems[0]['quantity'], '成交后的行修改同步进订单（数量 2→7）');
+        assertEquals(385.0, (float) $orders[0]['amount'], '订单金额按新明细重算');
+    } finally {
+        $restoreEnv();
+        if (is_resource($proc)) {
+            $pid = proc_get_status($proc)['pid'] ?? 0;
+            if ($pid > 0) {
+                @exec('taskkill /PID ' . (int) $pid . ' /T /F 2>&1');
+            }
+            proc_close($proc);
+        }
+        @unlink(sys_get_temp_dir() . '/crm_persist.log');
+        @unlink(sys_get_temp_dir() . '/crm_persist.err');
+    }
+}
+
 runCase();

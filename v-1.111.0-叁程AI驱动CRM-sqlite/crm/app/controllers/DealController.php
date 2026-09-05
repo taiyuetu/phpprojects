@@ -46,15 +46,7 @@ class DealController extends Controller
         $this->verifyCsrf();
 
         [$data, $errors] = $this->validate($_POST);
-        // 成交阶段的明细是在这里一起提交的，校验错误必须并进同一个表单回显，
-        // 否则“选了不存在的商品”会被静默丢掉，用户以为保存了。
-        if (strtolower(trim((string) ($_POST['stage'] ?? ''))) === 'closed_won') {
-            $dealItemCheck = OrderItem::normalizeRows(
-                is_array($_POST['items'] ?? null) ? (array) $_POST['items'] : [],
-                (string) Setting::get('items_require_product', '1') !== '0'
-            );
-            $errors = array_merge($errors, $dealItemCheck['errors']);
-        }
+        $this->errorsFromItems($_POST, $errors);
 
         // 商机从“进行中”开始：成交/丢单是流转的终点，只能由 update() 到达。
         // 不然会出现“没有订单的成交商机”这类半成品（成交必须自动生成订单，
@@ -75,15 +67,19 @@ class DealController extends Controller
             return;
         }
 
-        // 建档 + 阶段时间戳一次落库：任一失败就整体回滚，不留下半条记录。
+        // 建档 + 阶段时间戳 + 明细草稿一次落库：任一失败就整体回滚。
+        $items = $this->normalizedItems($_POST);
         $data['owner_id'] = $_SESSION['user_id'];
         $stageAt = 'stage_' . $data['stage'] . '_at';
         $data[$stageAt] = date('Y-m-d H:i:s');
 
+        $dealModel = $this->model('Deal');
         $db = Database::connection();
         $db->beginTransaction();
         try {
-            $dealId = $this->model('Deal')->create($data);
+            $dealId = $dealModel->create($data);
+            // 未成交阶段的行先存草稿：后面打开编辑页还在，推进到成交时再转成订单
+            $dealModel->setDraftItems($dealId, $items);
             $db->commit();
         } catch (Throwable $e) {
             $db->rollBack();
@@ -108,12 +104,12 @@ class DealController extends Controller
             return;
         }
 
-        // 成交后的商机会带一张自动生成的订单：编辑时把它的明细带回来，
-        // 否则用户看到的是空明细，一保存就把已有的行清空了。
+        // 明细的单一事实来源：已成交的商机看它自动生成的订单；还没成交的看草稿。
+        // 否则用户看到的行要么是空的（没建单），要么一保存就把已有的行清空了。
         $linkedOrders = $dealModel->orders((int) $id);
         $itemsForForm = $linkedOrders
             ? $this->model('OrderItem')->byOrder((int) $linkedOrders[0]['id'])
-            : [];
+            : $dealModel->draftItems((int) $id);
 
         $this->view('deals/edit', [
             'deal' => $deal,
@@ -141,15 +137,7 @@ class DealController extends Controller
         }
 
         [$data, $errors] = $this->validate($_POST);
-        // 成交阶段的明细是在这里一起提交的，校验错误必须并进同一个表单回显，
-        // 否则“选了不存在的商品”会被静默丢掉，用户以为保存了。
-        if (strtolower(trim((string) ($_POST['stage'] ?? ''))) === 'closed_won') {
-            $dealItemCheck = OrderItem::normalizeRows(
-                is_array($_POST['items'] ?? null) ? (array) $_POST['items'] : [],
-                (string) Setting::get('items_require_product', '1') !== '0'
-            );
-            $errors = array_merge($errors, $dealItemCheck['errors']);
-        }
+        $this->errorsFromItems($_POST, $errors);
 
         if ($errors) {
             $this->view('deals/edit', [
@@ -165,8 +153,12 @@ class DealController extends Controller
             return;
         }
 
-        // 改字段 + 阶段流转 + “成交自动转订单 + 明细 + 附件继承” / “丢单归档”
-        // 是一笔事务：任一步失败全部回滚，不留“商机已成交但订单没生成”的半成品。
+        $items = $this->normalizedItems($_POST);
+        // 这张商机名下有没有已生成的订单（曾经成交过）——决定明细写到哪里
+        $linkedOrders = $dealModel->orders((int) $id);
+        $itemModel = $this->model('OrderItem');
+
+        // 改字段 + 阶段流转 + 明细落库（草稿或订单）是一笔事务：任一步失败全部回滚。
         $db = Database::connection();
         $db->beginTransaction();
         try {
@@ -178,20 +170,45 @@ class DealController extends Controller
 
             $dealModel->update((int) $id, $data);
 
-            // 商机变更为 closed_won（成交）：自动创建订单，但不再归档，
-            // 商机保留在看板的"成交"列供查阅。
-            if ($oldDeal['stage'] !== 'closed_won' && $data['stage'] === 'closed_won') {
-                $this->autoCreateOrderFromDeal($oldDeal, $_POST);
-                $flash = '商机已成交并自动转为订单。';
-                $redirect = '/orders';
-            // 商机变更为 closed_lost（丢单）：自动归档，移出看板
-            } elseif ($oldDeal['stage'] !== 'closed_lost' && $data['stage'] === 'closed_lost') {
-                $dealModel->archive((int) $id);
-                $flash = '商机已标记为丢单并归档。';
-                $redirect = '/deals/archived';
+            if ($data['stage'] === 'closed_won') {
+                // 成交：行落到订单里（首次成交自动建单；已成交过的商机同步进它的订单），
+                // 草稿清空。商机保留在看板"成交"列供查阅，不归档。
+                if (!$linkedOrders) {
+                    $this->createOrderFromDealItems($oldDeal, $items);
+                } elseif ($items) {
+                    // 没提交任何行 = 用户没动行，不重写订单（避免把“按商机金额兜底”的旧单清成 0）
+                    $itemModel->syncItems((int) $linkedOrders[0]['id'], $items);
+                }
+                $dealModel->setDraftItems((int) $id, []);
+                $wasFirstClose = $oldDeal['stage'] !== 'closed_won';
+                $this->setFlash('success', $wasFirstClose
+                    ? '商机已成交并自动转为订单。'
+                    : '商机已更新，订单明细已同步。');
+                $db->commit();
+                $this->redirect($wasFirstClose ? '/orders' : '/deals');
+                return;
+            }
+
+            if ($data['stage'] === 'closed_lost') {
+                // 丢单：归档、移出看板；草稿没有意义，清掉
+                if ($oldDeal['stage'] !== 'closed_lost') {
+                    $dealModel->archive((int) $id);
+                }
+                $dealModel->setDraftItems((int) $id, []);
+                $this->setFlash('success', '商机已标记为丢单并归档。');
+                $db->commit();
+                $this->redirect('/deals/archived');
+                return;
+            }
+
+            // 未成交：有订单（被重新打开过的成交商机）→ 行同步进订单；
+            // 没有订单 → 行存成草稿，下次打开还在。空提交视为没动行，不重写。
+            if ($linkedOrders) {
+                if ($items) {
+                    $itemModel->syncItems((int) $linkedOrders[0]['id'], $items);
+                }
             } else {
-                $flash = '商机已更新。';
-                $redirect = '/deals';
+                $dealModel->setDraftItems((int) $id, $items);
             }
 
             $db->commit();
@@ -202,45 +219,42 @@ class DealController extends Controller
             return;
         }
 
-        $this->setFlash('success', $flash);
-        $this->redirect($redirect);
+        $this->setFlash('success', '商机已更新。');
+        $this->redirect('/deals');
     }
 
-    /**
-     * 商机成交时自动创建订单 + 商品明细
-     */
-    private function autoCreateOrderFromDeal(array $deal, array $post): void
+    // --------------------------------------------------------- 明细 helpers
+
+    /** 提交的明细行统一校验入口（任何阶段有行都要校验，页面与 AI 同一套 normalizeRows）。 */
+    private function errorsFromItems(array $post, array &$errors): void
     {
-        $orderModel = $this->model('Order');
-        $itemModel = $this->model('OrderItem');
-
-        // Check if order already exists for this deal
-        $existingOrders = $orderModel->byDeal((int) $deal['id']);
-        if (!empty($existingOrders)) {
-            // Ensure attachments are copied even for previously created orders
-            $existingOrderId = (int) $existingOrders[0]['id'];
-            $existingAtts = $this->model('Attachment')->byRelated('order', $existingOrderId);
-            if (empty($existingAtts)) {
-                $this->model('Attachment')->copyTo('deal', (int) $deal['id'], 'order', $existingOrderId, (int) $_SESSION['user_id']);
-            }
-            return;
-        }
-
-        // 明细走与订单同一套校验（OrderItem::normalizeRows）：
-        // 商机成交生成的订单，商品也得是从商品库里选出来的那一个。
-        $parsed = OrderItem::normalizeRows(
+        $dealItemCheck = OrderItem::normalizeRows(
             is_array($post['items'] ?? null) ? (array) $post['items'] : [],
             (string) Setting::get('items_require_product', '1') !== '0'
         );
-        $items = $parsed['items'];
+        $errors = array_merge($errors, $dealItemCheck['errors']);
+    }
 
-        // Calculate total from items, fallback to deal value
+    /** 提交的明细行 → 洗好可落库的行。 */
+    private function normalizedItems(array $post): array
+    {
+        return OrderItem::normalizeRows(
+            is_array($post['items'] ?? null) ? (array) $post['items'] : [],
+            (string) Setting::get('items_require_product', '1') !== '0'
+        )['items'];
+    }
+
+    /** 首次成交：以商机明细创建订单，并继承商机附件。 */
+    private function createOrderFromDealItems(array $deal, array $items): int
+    {
+        $orderModel = $this->model('Order');
+
+        // 行是成交事实：有行按行合计；没行退回商机金额兜底（与旧行为一致）
         $total = 0;
         foreach ($items as $item) {
             $total += $item['quantity'] * $item['unit_price'];
         }
 
-        // Create order
         $orderId = $orderModel->create([
             'order_number'    => $orderModel->generateOrderNumber(),
             'deal_id'         => $deal['id'],
@@ -253,19 +267,21 @@ class DealController extends Controller
             'owner_id'        => $_SESSION['user_id'],
         ]);
 
-        // Create items if provided
         if (!empty($items)) {
-            $itemModel->syncItems($orderId, $items);
+            $this->model('OrderItem')->syncItems($orderId, $items);
         }
 
-        // Copy attachments from deal to order
-        $this->model('Attachment')->copyTo(
-            'deal',
-            (int) $deal['id'],
-            'order',
-            (int) $orderId,
-            (int) $_SESSION['user_id']
-        );
+        $this->ensureOrderAttachments((int) $deal['id'], $orderId);
+        return $orderId;
+    }
+
+    /** 商机附件继承到订单（已有则不动）。 */
+    private function ensureOrderAttachments(int $dealId, int $orderId): void
+    {
+        $existingAtts = $this->model('Attachment')->byRelated('order', $orderId);
+        if (empty($existingAtts)) {
+            $this->model('Attachment')->copyTo('deal', $dealId, 'order', $orderId, (int) $_SESSION['user_id']);
+        }
     }
 
     public function destroy(string $id): void

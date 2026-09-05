@@ -53,7 +53,8 @@ class Ai extends Model
                        'plan_json', 'result_json'],
         'leads'      => ['lost_at'],
         'deals'      => ['stage_open_at', 'stage_proposal_at', 'stage_negotiation_at',
-                         'stage_closed_won_at', 'stage_closed_lost_at', 'archived_at'],
+                         'stage_closed_won_at', 'stage_closed_lost_at', 'archived_at',
+                         'draft_items'],
         'order_items' => ['subtotal', 'sort_order'],
     ];
 
@@ -3319,7 +3320,7 @@ TXT;
             if ($v === null || $v === '') {
                 continue;
             }
-            if (in_array($k, ['password_hash', 'api_key', 'result_json', 'plan_json'], true)) {
+            if (in_array($k, ['password_hash', 'api_key', 'result_json', 'plan_json', 'draft_items'], true)) {
                 continue;                                   // never surface secrets or bulk payloads
             }
             $fields[] = $k . '=' . textClip((string) $v, 120);
