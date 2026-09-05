@@ -234,8 +234,13 @@ final class TestHttp
  */
 function resetData(): void
 {
+    // 每个用例都会清库重灌：进程内的上下文 memo 必须一起失效，
+    // 否则上一个用例的“历史”会漏进下一个用例（真跑过一次，症状是计数永远停在 1）。
+    if (class_exists('Ai')) {
+        Ai::flushHistoryCache();
+    }
     $db = Database::connection();
-    foreach (['order_items', 'orders', 'attachments', 'follow_ups', 'activities', 'deals', 'leads', 'customers'] as $table) {
+    foreach (['order_items', 'orders', 'attachments', 'follow_ups', 'activities', 'deals', 'leads', 'customers', 'ai_actions'] as $table) {
         $db->exec("DELETE FROM {$table}");
     }
 }

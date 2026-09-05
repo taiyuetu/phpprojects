@@ -823,6 +823,71 @@
         </div>
         <div class="accordion-item">
             <h2 class="accordion-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faqM">
+                    AI 记得我们之前说过什么吗？（上下文窗口）
+                </button>
+            </h2>
+            <div id="faqM" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                <div class="accordion-body">
+                    看你给的窗口。<strong>设置 → AI 助手 → 上下文窗口</strong>（默认「最近 1 小时」，可选 15 分钟 / 1 / 4 小时 /
+                    今天之内 / 3 天 / 7 天，或干脆关掉）。窗口内你自己发起过的每一次请求——
+                    你说了什么、AI 当时答了什么、状态（已执行 / 待确认 / 已取消 / 失败）、以及动过哪几条记录的真实编号——
+                    会以 <code>&lt;history&gt;</code> 一块随问题一起送进模型。<br>
+                    于是这些句子能接得上：<strong>「把刚才那条线索标为流失」</strong>、<strong>「上次那个印度客户后来怎么样了」</strong>、
+                    <strong>「今天你帮我改了什么」</strong>。<br>
+                    两个要点：
+                    <ul class="mb-2">
+                        <li><strong>历史不另存副本</strong>，直接读审计表 <code>ai_actions</code>（就是「操作记录」那个页面）。
+                            所以不会出现「审计说删了两条、上下文说删了三条」这种对不上的两套真相。</li>
+                        <li><strong>只按你的账号过滤</strong>：同事发起的请求不会进你的上下文；反过来，别人也看不到你的
+                            （管理员例外——与「操作记录」页的“查看全部”同一口径）。</li>
+                    </ul>
+                    窗口外的记录并没有丢，只是不再随问题一起送过去。想让它翻旧账，直接说时间范围就行：
+                    「查一下上周三的报价请求」→ 它会用 <code>search_records(tables:ai_request, days / from / to)</code>
+                    去审计表里查，再用 <code>get_record</code> 看当时到底动了哪几条。<br>
+                    <strong>指代是服务端替他消解的</strong>：你说「把刚才那条线索标为流失」而不给编号时，<code>Ai::contextReferenceBlock()</code> 会从上下文里把最近的真实编号（如 <code>LEAD-000018</code>）钉好送过去，并要求模型直接用、不要再反问你要编号。窗口关掉时这块就是空的——它会老实说“请告诉我是哪条”，而不是猜一条。<br>
+                    为什么要有上限：历史每加一条，提示词就更长，模型响应更慢（提示词长度=你的等待时间）。
+                    所以这块有硬上限——最多 10 条、约 1500 字，超出的省略最老的，并明确写上「另有 N 次更早的请求未列出」，
+                    不装作完整。<br>
+                    还有一条容易忽略的：<strong>上下文不是当前库状态</strong>。里面提到的记录可能已经被你手工改过或删掉了，
+                    所以规则里写死了：要写数据前，必须以数据快照 / 服务端检索 / 当场查询的结果为准。
+                </div>
+            </div>
+        </div>
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faqN">
+                    我回一句「确认」，它却问我想确认什么？
+                </button>
+            </h2>
+            <div id="faqN" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                <div class="accordion-body">
+                    这是上下文没接上，现在两个方向一起修好了。<br>
+                    <strong>① 名字差一个字母不算查无此人。</strong>你说 <code>ashmad</code>、库里是 <code>Ahmad</code> 时，
+                    <code>Ai::fuzzyMatches()</code> 会用编辑距离找出近似对象，并在检索结果里写明
+                    「疑似『ashmad』＝客户 CUS-000020（Ahmad），差 1 个字母」。
+                    它标的是<strong>疑似</strong>不是确证——所以仍然会问你一句，但不会再说“没这个人”。
+                    只对四个字母以上的英文名做，中文不做模糊匹配（否则误伤太大）。<br>
+                    <strong>② 「确认」这两个字本身没有任何信息，所以由服务端替你接上。</strong>
+                    上一轮如果它只是提问、没留下计划，你回「确认 / 好的 / 对 / ok / 执行吧」时，
+                    <code>Ai::carryForwardIntent()</code> 会把上一轮的<strong>原始诉求</strong>和当时锁定的<strong>真实编号</strong>
+                    一起交给它（编号有时只出现在它的回答里，那里也会抓一次），并明确要求：照这个出动作，别再问你想确认什么。<br>
+                    两个边界值得知道：
+                    <ul class="mb-2">
+                        <li>上一轮<strong>已经生成了待确认计划</strong>时不会走这条路——那应该点计划卡片上的「确认执行」按钮，
+                            系统不该把同一件事再排一遍。</li>
+                        <li><strong>上下文窗口关掉时不续接</strong>。它这时会老实说“请告诉我是哪条”，而不是凭猜动手。</li>
+                    </ul>
+                    另外规则里写死了：<strong>要用户拍板就必须同时给出动作</strong>，不许只提问。
+                    预览页本来就有人工闸门，你点一下按钮就行；只提问等于把活儿推回给你，还会让下一句「确认」断了线。<br>
+                    顺带修的一个隐蔽缺陷：从“把电话改成 024324567891”这类句子里取号码时，
+                    原来会把开头的 <code>0</code> 吃掉（存成 <code>24324567891</code>，少一位就是打不通）。现在号码按整体扫描，
+                    开头的 <code>0</code> 和 <code>+</code> 都保得住。
+                </div>
+            </div>
+        </div>
+        <div class="accordion-item">
+            <h2 class="accordion-header">
                 <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faqJ">
                     AI 回复里的 <code>LEAD-000002</code>、<code>CUS-000007</code> 是什么？
                 </button>

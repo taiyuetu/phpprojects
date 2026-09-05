@@ -16,6 +16,11 @@ $enabled = (bool) ($config['enabled'] ?? false);
         <span class="badge bg-light text-dark border">
             <?= ($config['auto_apply'] ?? false) ? '自动执行' : '预览确认' ?>
         </span>
+        <?php $ctxMin = Ai::contextMinutes(); ?>
+        <span class="badge <?= $ctxMin > 0 ? 'bg-primary-subtle text-primary border' : 'bg-secondary-subtle text-secondary' ?>"
+              title="窗口内你自己发起的历史请求（含 AI 的回答与涉及的记录编号）会一并送进模型，所以“刚才那条”“上次那个客户”能接得上；历史直接读审计表 ai_actions">
+            上下文 <?= $ctxMin > 0 ? e(Ai::contextWindowLabel($ctxMin)) : '已关闭' ?>
+        </span>
         <?php if (!empty($config['fast_mode'])): ?>
             <span class="badge bg-success-subtle text-success border" title="让模型直接产出计划，而不是先写一段推理（提速首选）">快速模式</span>
         <?php endif; ?>

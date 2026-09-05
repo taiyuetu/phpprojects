@@ -239,7 +239,7 @@ function test_rounds_and_summary_are_audited(): void
 function test_the_prompt_teaches_the_query_then_act_pattern(): void
 {
     $prompt = Ai::systemPrompt();
-    assertContains('先只返回查询动作', $prompt);
+    assertContains('先只发查询', $prompt);   // 规则正文会被精简，断言盯住“先查后做”这件事本身
     assertContains('country / status / stage / owner', $prompt);
     assertContains('tool_results', $prompt);
     assertContains('一次最多删除 ' . Ai::MAX_DELETES . ' 条', $prompt);
