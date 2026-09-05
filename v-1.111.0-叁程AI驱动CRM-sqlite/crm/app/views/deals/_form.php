@@ -3,6 +3,8 @@
  * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
  */
 $d = $old ?? $deal ?? [];
+// 新建页（含校验失败回显）不传 $deal；编辑页传。成交/丢单是流转的终点，只能从编辑页推进。
+$creating = empty($deal);
 ?>
 <div class="row g-3 mb-3">
     <div class="col-md-8">
@@ -27,10 +29,16 @@ $d = $old ?? $deal ?? [];
     <div class="col-md-4">
         <label class="form-label">阶段</label>
         <select name="stage" class="form-select" id="deal-stage-select">
-            <?php foreach (['open' => '进行中', 'proposal' => '方案阶段', 'negotiation' => '谈判中', 'closed_won' => '成交', 'closed_lost' => '丢单'] as $val => $label): ?>
+            <?php $stageOptions = $creating
+                ? ['open' => '进行中', 'proposal' => '方案阶段', 'negotiation' => '谈判中']
+                : ['open' => '进行中', 'proposal' => '方案阶段', 'negotiation' => '谈判中', 'closed_won' => '成交', 'closed_lost' => '丢单'];
+            foreach ($stageOptions as $val => $label): ?>
                 <option value="<?= $val ?>" <?= ($d['stage'] ?? 'open') === $val ? 'selected' : '' ?>><?= e($label) ?></option>
             <?php endforeach; ?>
         </select>
+        <?php if ($creating): ?>
+            <div class="form-text">先以「进行中」建档；推进到成交 / 丢单在编辑页进行</div>
+        <?php endif; ?>
     </div>
     <div class="col-md-4">
         <label class="form-label">预计成交日期</label>
@@ -38,10 +46,11 @@ $d = $old ?? $deal ?? [];
     </div>
 </div>
 
-<!-- 商品明细区域（仅当阶段为 closed_won 时显示） -->
-<div id="items-section" class="mt-3" style="<?= ($d['stage'] ?? '') === 'closed_won' ? '' : 'display:none;' ?>">
+<!-- 商品明细：与订单表单同一份局部，任何阶段都可见、可先填。
+     只是这些行只在“保存时处于成交阶段”才会落成订单明细（见 DealController::update）。 -->
+<div id="items-section" class="mt-3">
     <div class="d-flex justify-content-between align-items-center mb-2">
-        <h6 class="text-muted mb-0"><i class="bi bi-box-seam me-1"></i>商品明细（成交后自动生成订单）</h6>
+        <h6 class="text-muted mb-0"><i class="bi bi-box-seam me-1"></i>商品明细（成交保存后自动生成订单）</h6>
         <button type="button" class="btn btn-sm btn-outline-primary" id="btn-add-item">
             <i class="bi bi-plus-lg"></i> 添加商品
         </button>
@@ -50,6 +59,9 @@ $d = $old ?? $deal ?? [];
     // 与订单表单同一份明细行局部：商品选择框、数量、单价、小计都长一样，不改两处
     $rows = (array) ($items ?? []);
     $products = (array) ($products ?? []);
+    // 商机明细对“还没成交”的保存是可选的，不设 required——否则开放阶段的空行
+    // 会触发浏览器 “invalid form control … is not focusable” 拦住整张表单。
+    $pickerRequired = false;
     include APP_PATH . '/views/partials/_items_fields.php';
     ?>
     <div class="text-end mt-2">

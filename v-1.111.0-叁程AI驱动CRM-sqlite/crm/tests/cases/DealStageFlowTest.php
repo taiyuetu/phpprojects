@@ -214,4 +214,95 @@ function test_lost_archives_the_deal(): void
     }
 }
 
+/**
+ * 回归：新建/编辑“进行中”商机也能看到并保存。
+ * 旧 bug：明细区在非成交阶段是 display:none，但里面的商品 select 仍是 required，
+ * 浏览器以 “invalid form control … is not focusable” 拦住整张表单 → 商机根本存不了。
+ */
+function test_create_and_save_open_deal_without_products(): void
+{
+    $c = new Customer();
+    $custId = $c->create(['id' => 9, 'name' => 'Open Deal Cust', 'status' => 'active']);
+
+    $publicDir = BASE_PATH . '/public';
+    $envFile = BASE_PATH . '/.env';
+    $hadEnv = file_exists($envFile);
+    $envBackup = $hadEnv ? file_get_contents($envFile) : '';
+    file_put_contents($envFile, 'DB_PATH=' . $GLOBALS['TEST_DB_PATH'] . PHP_EOL);
+    $restoreEnv = function () use ($envFile, $hadEnv, $envBackup): void {
+        if ($hadEnv) {
+            file_put_contents($envFile, $envBackup);
+        } else {
+            @unlink($envFile);
+        }
+    };
+
+    $proc = null;
+    try {
+        $port = random_int(18000, 18999);
+        $serverCmd = escapeshellarg(PHP_BINARY) . ' -S 127.0.0.1:' . $port
+            . ' -t ' . escapeshellarg($publicDir);
+        $proc = proc_open($serverCmd, [
+            0 => ['pipe', 'r'],
+            1 => ['file', sys_get_temp_dir() . '/crm_open.log', 'w'],
+            2 => ['file', sys_get_temp_dir() . '/crm_open.err', 'w'],
+        ], $pipes, $publicDir);
+        assertTrue(is_resource($proc), 'built-in server started');
+
+        $base = "http://127.0.0.1:{$port}";
+        $http = new TestHttp();
+        $up = false;
+        for ($i = 0; $i < 30; $i++) {
+            if ($http->reachable($base . '/login')) {
+                $up = true;
+                break;
+            }
+            usleep(100000);
+        }
+        assertTrue($up, 'server reachable');
+
+        $csrf = startServerAndLogin($http, $base);
+
+        // 新建页：商品明细区可见（不再 display:none），行内商品 select 不设 required
+        $createPage = $http->get($base . '/deals/create')['body'];
+        assertContains('id="items-section"', $createPage, '新建页有商品明细区');
+        assertContains('items[0][product_id]', $createPage, '有一行可填的商品选择框');
+        assertTrue(!str_contains($createPage, 'id="items-section" class="mt-3" style="display:none;"'),
+            '明细区不再被 display:none 藏起来');
+        assertTrue(!str_contains($createPage, '> 成交 <') && !str_contains($createPage, '>成交<'),
+            '新建阶段下拉不出现 成交/丢单（它们只能从编辑页推进）');
+
+        // 保存一张“进行中”、不带任何商品行的商机 → 必须成功（旧 bug 会 400 拦在浏览器层）
+        $code = $http->post($base . '/deals', [
+            'csrf_token' => $csrf,
+            'title' => '开放商机·不填商品',
+            'customer_id' => (string) $custId,
+            'value' => '888',
+            'stage' => 'open',
+            'close_date' => '',
+        ])['code'];
+        assertEquals(200, $code, '新建开放商机保存成功（200 跟完跳转）');
+        $deals = (new Deal())->all('id ASC');
+        assertEquals(1, count($deals), '库里有这张商机');
+        assertEquals('开放商机·不填商品', $deals[0]['title']);
+        assertEquals('open', $deals[0]['stage'], '阶段保持进行中');
+
+        // 编辑这张“进行中”商机：明细区同样可见
+        $editPage = $http->get($base . '/deals/' . (int) $deals[0]['id'] . '/edit')['body'];
+        assertContains('id="items-section"', $editPage, '编辑开放商机也有商品明细区');
+        assertContains('id="items-section" class="mt-3">', $editPage, 'items-section 自身不再带 display:none');
+    } finally {
+        $restoreEnv();
+        if (is_resource($proc)) {
+            $pid = proc_get_status($proc)['pid'] ?? 0;
+            if ($pid > 0) {
+                @exec('taskkill /PID ' . (int) $pid . ' /T /F 2>&1');
+            }
+            proc_close($proc);
+        }
+        @unlink(sys_get_temp_dir() . '/crm_open.log');
+        @unlink(sys_get_temp_dir() . '/crm_open.err');
+    }
+}
+
 runCase();

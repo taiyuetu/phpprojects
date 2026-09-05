@@ -19,6 +19,9 @@
  */
 $name = (string) ($name ?? 'product_id');
 $selected = (string) ($selected ?? '');
+// 行内商品是否必选。订单表单永远必选；商机表单在“推进到成交保存”时才由服务端
+// 校验（浏览器层不 required，否则开放阶段的空行会挡住整个表单提交）。
+$pickerRequired = (bool) ($pickerRequired ?? true);
 $legacyJson = is_array($legacy ?? null) ? json_encode((array) $legacy, JSON_UNESCAPED_UNICODE) : '';
 // 有 legacy 时不加 required：这种行允许“原样保留”，不能被浏览器拦在提交前；
 // 一旦用户改了名称或价格，服务端仍会要求他从商品库里选。
@@ -39,7 +42,7 @@ $legacyJson = is_array($legacy ?? null) ? json_encode((array) $legacy, JSON_UNES
     <select name="<?= e($name) ?>"
             class="form-select form-select-sm picker-select"
             data-picker-select
-            <?= $legacy !== null ? '' : 'required' ?>
+            <?= $pickerRequired && $legacy === null ? 'required' : '' ?>
             aria-label="选择商品"></select>
     <div class="form-text picker-hint text-danger d-none py-1" data-picker-empty>
         商品库里没有匹配的商品。<a href="<?= url('/products/create') ?>" target="_blank" rel="noopener">去新建一个 →</a>

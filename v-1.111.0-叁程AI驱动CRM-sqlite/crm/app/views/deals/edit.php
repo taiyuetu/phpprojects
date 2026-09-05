@@ -71,17 +71,4 @@ $relatedId = (int) $deal['id'];
     </div>
 </div>
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // 只有成交阶段才需要填明细：不是成交就别把这块占着屏幕
-    const stageSelect = document.getElementById('deal-stage-select');
-    const itemsSection = document.getElementById('items-section');
-    if (!stageSelect || !itemsSection) return;
-    const toggle = function () {
-        itemsSection.style.display = stageSelect.value === 'closed_won' ? '' : 'none';
-    };
-    stageSelect.addEventListener('change', toggle);
-    toggle();
-});
-</script>
 <?php include APP_PATH . '/views/partials/_items_js.php'; ?>
