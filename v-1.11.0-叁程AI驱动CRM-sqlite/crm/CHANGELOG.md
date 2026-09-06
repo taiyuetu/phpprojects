@@ -61,6 +61,14 @@
 - 客户「转化时间」显示统一为只含日期（列表页新增列与详情页均为 `Y-m-d`），不再带时分。
 
 ### Fixed
+- **询价被 AI 直接建成客户档案**：一句“印度尼西亚客户阿桑比发来询价，需要现代轮毂单元1000套”，
+  真实模型因为句里写着“客户”就 `create_customer`，跳过了“线索 → 商机 → 客户”这条主线。
+  两层修正：提示词加规则 1b（首次接触一律先 `create_lead`，只有明说“建客户/客户档案/转客户/建商机/下单”
+  才建客户/商机）；`Ai::routeInquiryToLead()` 在 validatePlan **之前**做服务端改写：单条
+  `create_customer`、指令带询价信号、且用户没点名建档 → 改写为 `create_lead` 并按线索列映射字段
+  （name→title/contact_name、email→contact_email 等），预览里看到的就是“新建线索”，不靠提示词祈祷；
+  用户点名建档时不改写。演示模型本来就正确（早就把询盘归到 create_lead）。系统提示新增规则 1b，
+  预算上限 7900 → 8100（本项目约定：真实增长时在 CHANGELOG 说明即可调整）。
 - **新建/编辑分类崩溃**：表单把 `sort_order=0`（默认值）提交上来后，通用字段清洗把 `int` 类型的 0 当
   “不关联的外键”转成 `NULL`，撞上 `categories.sort_order NOT NULL` 约束直接 500。
   `Category::sanitizeInput()` 覆写把空值/0 归零（0 是合法默认排序），新建与编辑同时修复。

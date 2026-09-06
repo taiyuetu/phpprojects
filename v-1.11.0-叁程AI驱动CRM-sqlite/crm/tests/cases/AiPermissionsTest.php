@@ -491,7 +491,7 @@ function test_the_tool_table_is_the_single_source_of_truth(): void
     assertContains('删除', $prompt);
     assertContains('真实 ID', $prompt);
     // 上限是回归闸门而不是目标值：能力增加时提示词会长，但不许无节制地长
-    assertTrue(textLength($prompt) < 7900, '系统提示仍受长度约束（实测 ' . textLength($prompt) . ' 字）');
+    assertTrue(textLength($prompt) < 8100, '系统提示仍受长度约束（实测 ' . textLength($prompt) . ' 字）');
 
     // every tool is reachable: it has a runner, or it is refused as unimplemented
     foreach (array_keys($tools) as $name) {

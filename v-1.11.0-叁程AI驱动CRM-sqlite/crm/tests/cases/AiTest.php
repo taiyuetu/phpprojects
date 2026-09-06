@@ -377,7 +377,7 @@ function test_requests_are_bounded_so_answers_come_back_fast(): void
     // prompt grows with capability, not without bound.
     // 工具的参数名必须逐个进提示词（那是能力面：字段清单由表结构生成，24 个工具），
     // 但总量仍要受控——提示词长度就是用户的等待时间。上限随模块增长时要在 CHANGELOG 里说清为什么。
-    assertTrue(textLength($seen['messages'][0]['content']) < 7900,
+    assertTrue(textLength($seen['messages'][0]['content']) < 8100,
         'the system prompt stays bounded (got ' . textLength($seen['messages'][0]['content']) . ')');
     AiClient::$transport = null;
     (new Setting())->setMany(['ai_max_tokens' => '800'], 1);
@@ -662,6 +662,49 @@ function test_the_prompt_asks_for_a_json_plan_and_whitelists_the_tools(): void
     assertEquals('system', $messages[0]['role']);
     assertContains('<data>', $messages[1]['content'], 'context is wrapped as data');
     assertContains('测试指令', $messages[1]['content']);
+}
+
+/**
+ * 询价不许直接建客户：真 Key 实测一句“印度尼西亚客户阿桑比发来询价，需要现代轮毂
+ * 单元1000套”，模型因为句里写着“客户”就直接 create_customer。业务主线是询价先进
+ * 线索池，所以服务端改写而不是提示词祈祷；但用户点名“建客户档案”时不能替他作主。
+ */
+function test_an_inquiry_becomes_a_lead_even_when_the_model_builds_a_customer(): void
+{
+    $u = aiUser('asambi-' . substr(uniqid(), -5) . '@example.com', '阿桑比业务员');
+    $_SESSION['user_id'] = $u;
+    $_SESSION['user'] = ['id' => $u, 'role' => 'sales'];
+
+    aiUseFakeTransport(['ai_provider' => 'deepseek']);
+    AiClient::$transport = static fn() => ['ok' => true, 'error' => '', 'status' => 200, 'raw' => '',
+        'json' => ['choices' => [['message' => ['content' =>
+            '{"reply":"已为您建好客户档案","actions":[{"tool":"create_customer","args":{"name":"阿桑比","source_country":"印度尼西亚","company":"PT Asambi","notes":"需要现代轮毂单元 1000 套"}}]}'
+        ]]]]];
+
+    $res = Ai::complete('印度尼西亚客户阿桑比发来询价，需要现代轮毂单元1000套', $u);
+    assertTrue((bool) ($res['ok'] ?? false), '应给出计划：' . (string) ($res['error'] ?? ''));
+    assertEquals('create_lead', (string) ($res['actions'][0]['tool'] ?? ''), '单条建客户被改写为新建线索');
+    assertContains('先记为线索', (string) ($res['reply'] ?? ''), '要告诉用户改写了什么');
+
+    $checked = Ai::validatePlan((array) $res['actions'], $u);
+    assertEquals([], (array) ($checked['errors'] ?? []), '改写后的计划照常过校验：' . json_encode($checked['errors'] ?? []));
+    assertContains('新建线索', (string) ($checked['actions'][0]['label'] ?? ''), '预览里显示的是线索而不是客户');
+
+    $before = (int) Database::connection()->query('SELECT COUNT(*) FROM customers')->fetchColumn();
+    $run = Ai::execute($checked['actions'], $u);
+    assertEquals(1, (int) ($run['applied'] ?? 0), '线索落库');
+    $after = (int) Database::connection()->query('SELECT COUNT(*) FROM customers')->fetchColumn();
+    assertEquals($before, $after, '客户表没被动过');
+
+    // 用户点名建档时绝不替他改主意
+    $keep = Ai::routeInquiryToLead([['tool' => 'create_customer', 'args' => ['name' => '阿桑比']]],
+        '给印度尼西亚的阿桑比建客户档案');
+    assertEquals('create_customer', (string) $keep[0][0]['tool'], '点名建档不改写');
+
+    // 提示词与服务器同一个口径
+    assertContains('一律先 create_lead', Ai::systemPrompt(), '规则1b 要写进提示词');
+
+    aiResetSettings();
 }
 
 runCase();
