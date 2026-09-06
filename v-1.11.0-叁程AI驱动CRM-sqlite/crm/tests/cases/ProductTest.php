@@ -280,6 +280,12 @@ function test_prompt_and_docs_mention_the_catalog(): void
     assertContains('product', (string) json_encode(Ai::toolsForPrompt(), JSON_UNESCAPED_UNICODE));
     assertContains('不要塞自由文本的商品名', $prompt, '规则要说清明细的引用要求');
     assertContains('商品', Ai::contextDigest($user), '数据快照里应有商品计数');
+    // 真实模型曾凭“商品 0”脑补出“categories 表为空”：分类计数与分类工具都必须在
+    // 上下文里，否则模型无从得知分类表存在（数据都对，就是没人告诉它有分类）。
+    assertContains('分类', Ai::contextDigest($user), '数据快照里应有分类计数');
+    assertContains('create_category', $prompt, '提示词里要有分类工具');
+    assertContains('search_records(tables:category)', $prompt, '规则要教模型分类走 category 面');
+    assertContains('不是商品表的 category 过滤列', $prompt, '提示词要把分类和商品属性区分开');
 
     $docs = AppMap::toText();
     assertContains('products', $docs, '数据字典要能查到商品表');

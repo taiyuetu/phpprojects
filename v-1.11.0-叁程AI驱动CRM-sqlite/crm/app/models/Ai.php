@@ -914,7 +914,7 @@ TXT;
         $db0 = Database::connection();
         $totals = [];
         foreach (['customers' => '客户', 'leads' => '线索', 'deals' => '商机', 'orders' => '订单',
-                  'products' => '商品', 'follow_ups' => '跟进', 'ai_actions' => 'AI 记录'] as $tbl => $zh) {
+                  'products' => '商品', 'categories' => '分类', 'follow_ups' => '跟进', 'ai_actions' => 'AI 记录'] as $tbl => $zh) {
             try {
                 $totals[] = $zh . ' ' . (int) $db0->query('SELECT COUNT(*) FROM ' . $tbl)->fetchColumn();
             } catch (Throwable $e) {
@@ -1524,6 +1524,27 @@ TXT;
                     . '（用 country / status / stage / owner 或 q，实在没条件就写 all:true），'
                     . '拿到真实编号后下一轮再出删除计划。'];
                 continue;
+            }
+
+            // 兜底（真实模型会凭印象说“库是空的”）：用户明确在说分类，而这一轮模型
+            // 既没查库也没给动作 → 服务端先真实查一次分类表，把结果推回去再问一轮。
+            if (!$readSteps && !$rounds && $round < self::MAX_TOOL_ROUNDS
+                && preg_match('~分类|品类|类别~u', $instruction)) {
+                $probe = self::validatePlan([['tool' => 'search_records',
+                    'args' => ['tables' => 'category', 'all' => true, 'limit' => '50'],
+                    'reason' => '服务端兜底：先查清分类表再说有没有']], $uid);
+                $probeRead = array_values(array_filter($probe['actions'],
+                    static fn($a) => !empty($a['read']) && empty($a['errors'])));
+                if ($probeRead) {
+                    $probeRun = self::execute($probeRead, $uid);
+                    $rounds[] = ['round' => $round,
+                        'asked' => array_map(static fn($a) => ['tool' => $a['tool'], 'args' => $a['args']], $probeRead),
+                        'results' => self::compactReadResults($probeRun['results'])];
+                    $messages[] = ['role' => 'assistant', 'content' => (string) $reply['content']];
+                    $messages[] = ['role' => 'user', 'content' => self::toolResultsPrompt($rounds[count($rounds) - 1]['results'])
+                        . "\n上面是刚刚真实执行的分类查询：有你要的分类就按编号出计划；确实一条都没有，就照实说分类表是空的。"];
+                    continue;
+                }
             }
 
             if (!$readSteps) {
