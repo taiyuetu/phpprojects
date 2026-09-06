@@ -122,12 +122,12 @@ function test_all_main_pages_respond_200(): void
     ]);
 
     withTestServer('smoke', function (TestHttp $http, string $base, string $csrf): void {
-        // Pages expected to render 200 for a signed-in user (only real routes —
-        // leads and deals have no show page, they go from list straight to edit).
+        // Pages expected to render 200 for a signed-in user (real routes only;
+        // every resource — customers, leads, deals, orders — has a {id} show page).
         $pages = [
             '/', '/customers', '/customers/create', '/customers/1',
-            '/customers/1/edit', '/leads', '/leads/create', '/leads/1/edit',
-            '/deals', '/deals/create', '/deals/1/edit', '/deals/archived',
+            '/customers/1/edit', '/leads', '/leads/create', '/leads/1', '/leads/1/edit',
+            '/deals', '/deals/create', '/deals/1', '/deals/1/edit', '/deals/archived',
             '/orders', '/orders/create', '/orders/1', '/orders/1/edit', '/help',
             '/settings', '/settings?tab=app', '/settings?tab=profile', '/settings?tab=password',
             '/settings?tab=ai', '/ai', '/ai/history',

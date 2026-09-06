@@ -30,6 +30,30 @@ class LeadController extends Controller
         ]);
     }
 
+    /** 线索单页：点击列表标题进入，查看完整信息。 */
+    public function show(string $id): void
+    {
+        $this->requireAuth();
+
+        $lead = $this->model('Lead')->find((int) $id);
+        if (!$lead) {
+            $this->setFlash('error', '线索不存在。');
+            $this->redirect('/leads');
+            return;
+        }
+
+        // 若该线索已通过“转为商机”与某个客户绑定，单页给出直达链接
+        $customer = !empty($lead['customer_id'])
+            ? $this->model('Customer')->find((int) $lead['customer_id'])
+            : null;
+
+        $this->view('leads/show', [
+            'lead'     => $lead,
+            'customer' => $customer ?: null,
+            'csrf'     => $this->csrfToken(),
+        ]);
+    }
+
     public function create(): void
     {
         $this->requireAuth();

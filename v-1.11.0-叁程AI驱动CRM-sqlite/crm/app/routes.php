@@ -38,6 +38,7 @@ $router->delete('/leads/{id}', 'LeadController@destroy');
 $router->post('/leads/{id}/convert', 'LeadController@convert');
 $router->post('/leads/{id}/lost', 'LeadController@markLost');
 $router->post('/leads/{id}/reactivate', 'LeadController@reactivate');
+$router->get('/leads/{id}', 'LeadController@show');
 
 // ---- Products (商品库 / 主数据) ----
 $router->get('/products', 'ProductController@index');
@@ -89,6 +90,7 @@ $router->get('/deals/{id}/edit', 'DealController@edit');
 $router->put('/deals/{id}', 'DealController@update');
 $router->delete('/deals/{id}', 'DealController@destroy');
 $router->get('/deals/archived', 'DealController@archived');
+$router->get('/deals/{id}', 'DealController@show');
 $router->post('/deals/{id}/unarchive', 'DealController@unarchive');
 $router->post('/deals/{id}/create-order', 'OrderController@createFromDeal');
 $router->post('/deals/{id}/attachments', 'DealController@uploadAttachment');

@@ -42,7 +42,7 @@ $columns = [
 
                 <?php foreach ($stages[$key] as $d): ?>
                     <div class="deal-card">
-                        <div class="fw-semibold"><?= e($d['title']) ?></div>
+                        <div class="fw-semibold"><a href="<?= url('/deals/' . $d['id']) ?>" class="text-decoration-none text-body"><?= e($d['title']) ?></a></div>
                         <div class="small text-muted"><?= e((new Deal())->codeOf($d)) ?></div>
                         <div class="d-flex justify-content-between align-items-center">
                             <span class="fw-semibold"><?= money($d['value']) ?></span>

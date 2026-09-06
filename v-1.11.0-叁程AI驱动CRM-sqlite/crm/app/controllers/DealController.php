@@ -26,6 +26,31 @@ class DealController extends Controller
         $this->view('deals/index', ['stages' => $stages, 'search' => $search]);
     }
 
+    /** 商机单页：点击看板标题进入，查看完整信息与关联订单/附件。 */
+    public function show(string $id): void
+    {
+        $this->requireAuth();
+
+        $deal = $this->model('Deal')->find((int) $id);
+        if (!$deal) {
+            $this->setFlash('error', '商机不存在。');
+            $this->redirect('/deals');
+            return;
+        }
+
+        $customer = !empty($deal['customer_id'])
+            ? $this->model('Customer')->find((int) $deal['customer_id'])
+            : null;
+
+        $this->view('deals/show', [
+            'deal'        => $deal,
+            'customer'    => $customer ?: null,
+            'orders'      => $this->model('Deal')->orders((int) $deal['id']),
+            'attachments' => $this->model('Attachment')->byRelated('deal', (int) $deal['id']),
+            'csrf'        => $this->csrfToken(),
+        ]);
+    }
+
     public function create(): void
     {
         $this->requireAuth();
