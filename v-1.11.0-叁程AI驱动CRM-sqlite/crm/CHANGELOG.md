@@ -35,6 +35,11 @@
 - AI 商品工具不暴露 `category_id` 内部 FK（`Ai::PROTECTED_COLUMNS['products']`），AI 仍按旧行为写
   `category` 分类名文本；`create_product/update_product` 工具面随真实列数微增，系统提示词预算上限由
   7400 调到 7500（本项目约定：模块真实增长时在 CHANGELOG 说明即可调整）。
+- AI 新增商品分类 CRUD 工具（`create_category` / `update_category` / `delete_category`）以及
+  `search_records(tables:category)`、`get_record(type:category)`：分类可与商品、客户一样被增改查删；
+  `delete_category` 只清空商品上的分类引用（与分类管理页一致，商品不删）。
+  删除类工具 6 → 7、全部工具 24 → 27；提示词预算上限随工具增加由 7500 调到 7900
+  （本项目约定：模块真实增长时在 CHANGELOG 说明即可调整）。
 - 客户「转化时间」显示统一为只含日期（列表页新增列与详情页均为 `Y-m-d`），不再带时分。
 
 ### Fixed

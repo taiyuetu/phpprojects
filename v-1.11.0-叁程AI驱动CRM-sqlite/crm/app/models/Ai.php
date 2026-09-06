@@ -106,6 +106,7 @@ class Ai extends Model
             'archived' => '是否归档', 'product_name' => '产品名称', 'sku' => 'SKU', 'quantity' => '数量',
             'category' => '分类', 'brand' => '品牌', 'spec' => '规格', 'price' => '单价', 'cost' => '参考价', 'product_id' => '商品',
             'unit_price' => '单价', 'unit' => '单位', 'payment_status' => '收款状态',
+            'sort_order' => '排序',
         ];
     }
 
@@ -449,7 +450,7 @@ class Ai extends Model
                     'q'       => ['label' => '关键词', 'type' => 'string', 'max' => 120,
                                   'hint'  => '可留空，此时至少要给一个过滤条件'],
                     'tables'  => ['label' => '范围', 'type' => 'table_list',
-                                  'options' => ['lead', 'customer', 'deal', 'order', 'product', 'order_item', 'follow_up', 'activity', 'ai_request']],
+                                  'options' => ['lead', 'customer', 'deal', 'order', 'product', 'category', 'order_item', 'follow_up', 'activity', 'ai_request']],
                     'country' => ['label' => '国家', 'type' => 'string', 'max' => 80,
                                   'hint'  => '按 source_country 精确匹配，如 India / United States'],
                     'status'  => ['label' => '状态', 'type' => 'string', 'max' => 30,
@@ -476,7 +477,7 @@ class Ai extends Model
                 'hint'   => '取一条记录的完整字段与关联数量（商机数/订单数/跟进数/附件数）。',
                 'params' => [
                     'type' => ['label' => '类型', 'type' => 'enum', 'required' => true,
-                               'options' => ['lead', 'customer', 'deal', 'order', 'product', 'follow_up', 'ai_request']],
+                               'options' => ['lead', 'customer', 'deal', 'order', 'product', 'category', 'follow_up', 'ai_request']],
                     'id'   => ['label' => '记录编号或 ID', 'type' => 'string', 'required' => true, 'max' => 20],
                 ],
             ],
@@ -605,6 +606,23 @@ class Ai extends Model
                     self::fieldsFor('products')
                 ),
             ],
+            // ---------------------------------------------------------------- 商品分类（主数据）
+            'create_category' => [
+                'label'  => '新增商品分类',
+                'kind'   => 'write',
+                'hint'   => '建进分类库；商品表单里的“分类”下拉从这里选。',
+                'params' => self::fieldsFor('categories', true),
+            ],
+            'update_category' => [
+                'label'  => '修改商品分类',
+                'kind'   => 'write',
+                'at_least_one' => true,
+                'hint'   => '只传要改的字段（name / sort_order / status）。分类改名后，已挂该分类的商品会跟着显示新名字。',
+                'params' => array_merge(
+                    ['category_id' => ['label' => '分类 ID', 'type' => 'category_id', 'required' => true]],
+                    self::fieldsFor('categories')
+                ),
+            ],
             // ---------------------------------------------------------------- 设置
             'get_settings' => [
                 'label'  => '查看系统设置',
@@ -655,6 +673,12 @@ class Ai extends Model
                 'kind'   => 'delete',
                 'hint'   => '已被订单明细引用的商品删不掉（会提示改用停用），历史订单得知道卖的是什么。',
                 'params' => self::deleteParams('product_id', '商品编号或 ID', 'product_id'),
+            ],
+            'delete_category' => [
+                'label'  => '删除商品分类',
+                'kind'   => 'delete',
+                'hint'   => '删除后该分类下商品不会删，只是分类被清空（商品仍在商品库）。',
+                'params' => self::deleteParams('category_id', '分类 ID', 'category_id'),
             ],
             'delete_ai_request' => [
                 'label'  => '删除一条 AI 请求记录',
@@ -2911,6 +2935,9 @@ TXT;
             case 'create_product':
                 return self::runInsert('product', $args, $userId);
 
+            case 'create_category':
+                return self::runInsert('category', $args, $userId);
+
             // ---------------------------------------------------------------- 修改
             case 'update_lead':
                 return self::runModify('lead', $args);
@@ -2929,6 +2956,9 @@ TXT;
 
             case 'update_product':
                 return self::runModify('product', $args);
+
+            case 'update_category':
+                return self::runModify('category', $args);
 
             case 'update_lead_status':
                 $model = new Lead();
@@ -2978,6 +3008,9 @@ TXT;
 
             case 'delete_product':
                 return self::runDelete('product', (int) $args['product_id'], $str('reason'));
+
+            case 'delete_category':
+                return self::runDelete('category', (int) $args['category_id'], $str('reason'));
 
             case 'delete_ai_request':
                 $id = (int) $args['action_id'];
@@ -3099,6 +3132,10 @@ TXT;
                              'match' => ['public_code'],
                              'show'  => ['public_code', 'name', 'sku', 'partnumber', 'oem', 'application', 'unit', 'price', 'status'],
                              'filters' => ['status' => 'status', 'category' => 'category']],
+            'category'   => ['table' => 'categories',  'label' => '分类', 'owner' => '',
+                             'match' => ['name'],
+                             'show'  => ['name', 'sort_order', 'status'],
+                             'filters' => ['status' => 'status']],
             'ai_request' => ['table' => 'ai_actions',  'label' => 'AI 记录', 'owner' => 'user_id',
                              'match' => ['instruction', 'reply', 'status', 'error'],
                              'show'  => ['status', 'instruction', 'reply', 'model', 'created_at'],
@@ -3361,6 +3398,7 @@ TXT;
             'deal'       => ['Deal', 'deals', '商机', 'owner_id'],
             'order'      => ['Order', 'orders', '订单', 'owner_id'],
             'product'    => ['Product', 'products', '商品', 'owner_id'],
+            'category'   => ['Category', 'categories', '分类', ''],
             'follow_up'  => ['FollowUp', 'follow_ups', '跟进记录', 'user_id'],
             'ai_request' => ['Ai', 'ai_actions', 'AI 记录', 'user_id'],
         ];
@@ -3465,6 +3503,7 @@ TXT;
             'order'    => ['明细行' => $count("SELECT COUNT(*) FROM order_items WHERE order_id = {$id}"),
                            '附件' => $count("SELECT COUNT(*) FROM attachments WHERE related_type = 'order' AND related_id = {$id}")],
             'lead'     => ['已转客户' => $count("SELECT COUNT(*) FROM customers WHERE id = (SELECT customer_id FROM leads WHERE id = {$id})") ? 1 : 0],
+            'category' => ['商品' => $count("SELECT COUNT(*) FROM products WHERE category_id = {$id}")],
             default    => [],
         };
         if (!$parts) {
@@ -3490,6 +3529,7 @@ TXT;
             'delete_order'      => ['order', 'order_id', 'Order'],
             'delete_customer'   => ['customer', 'customer_id', 'Customer'],
             'delete_product'    => ['product', 'product_id', 'Product'],
+            'delete_category'   => ['category', 'category_id', 'Category'],
             'delete_ai_request' => ['ai_request', 'action_id', ''],
             default             => ['', '', ''],
         };
@@ -3519,7 +3559,8 @@ TXT;
             }
         };
         $table = ['lead' => 'leads', 'customer' => 'customers', 'deal' => 'deals',
-                  'order' => 'orders', 'product' => 'products', 'ai_request' => 'ai_actions'][$type] ?? '';
+                  'order' => 'orders', 'product' => 'products', 'category' => 'categories',
+                  'ai_request' => 'ai_actions'][$type] ?? '';
         if ($table === '') {
             return [];
         }
@@ -3570,6 +3611,9 @@ TXT;
         } elseif ($type === 'order') {
             $impact['cascade'] = ['明细行' => $n("SELECT COUNT(*) FROM order_items WHERE order_id = {$id}"),
                                   '附件' => $n("SELECT COUNT(*) FROM attachments WHERE related_type = 'order' AND related_id = {$id}")];
+        } elseif ($type === 'category') {
+            // 分类是主数据：删分类只清空商品上的引用，商品本身不动（与分类管理页一致）
+            $impact['cascade'] = ['商品分类将被清空' => $n("SELECT COUNT(*) FROM products WHERE category_id = {$id}")];
         }
         $impact['count'] += array_sum($impact['cascade']);
         return $impact;
@@ -3596,6 +3640,9 @@ TXT;
             'product'   => ['model' => Product::class,   'table' => 'products',   'label' => '商品',
                             'pk' => 'product_id', 'kind' => 'product',
                             'defaults' => ['status' => 'active', 'unit' => '件', 'price' => 0]],
+            'category'  => ['model' => Category::class,  'table' => 'categories', 'label' => '分类',
+                            'pk' => 'category_id', 'kind' => 'category',
+                            'defaults' => ['status' => 'active', 'sort_order' => 0]],
             'follow_up' => ['model' => FollowUp::class,  'table' => 'follow_ups', 'label' => '跟进记录',
                             'pk' => 'follow_up_id', 'kind' => 'follow_up',
                             'defaults' => ['type' => 'follow_up']],
@@ -3626,7 +3673,16 @@ TXT;
                         . ' 添加跟进记录 #' . (int) $id . '：' . textClip((string) ($data['title'] ?? ''), 60)];
         }
 
-        $data['owner_id'] = $userId;
+        // 归属人：业务记录写当前账号；分类等主数据没有 owner_id 列，不写。
+        if ($table === 'categories') {
+            $dup = (new Database())->query('SELECT id FROM categories WHERE name = :n LIMIT 1')
+                ->bind(':n', (string) ($data['name'] ?? ''))->single();
+            if ($dup) {
+                return ['ok' => false, 'message' => '分类「' . textClip((string) ($data['name'] ?? ''), 40) . '」已存在（分类名称唯一，直接改那个分类即可）'];
+            }
+        } else {
+            $data['owner_id'] = $userId;
+        }
         if ($table === 'orders') {
             $data['order_number'] = (new Order())->generateOrderNumber();
         }
@@ -3661,6 +3717,14 @@ TXT;
         $data = self::collectFields($table, $args);
         if ($data === []) {
             return ['ok' => false, 'message' => '没有要修改的字段'];
+        }
+
+        if ($table === 'categories' && isset($data['name'])) {
+            $dup = (new Database())->query('SELECT id FROM categories WHERE name = :n AND id <> :id LIMIT 1')
+                ->bind(':n', (string) $data['name'])->bind(':id', $id, PDO::PARAM_INT)->single();
+            if ($dup) {
+                return ['ok' => false, 'message' => '分类「' . textClip((string) $data['name'], 40) . '」已存在，换个名称'];
+            }
         }
 
         if ($table === 'leads' && isset($data['status'])) {
@@ -3816,9 +3880,9 @@ TXT;
     {
         $db = Database::connection();
         $table = ['lead' => 'leads', 'customer' => 'customers', 'deal' => 'deals', 'order' => 'orders',
-                  'product' => 'products'][$type];
+                  'product' => 'products', 'category' => 'categories'][$type];
         $label = ['lead' => '线索', 'customer' => '客户', 'deal' => '商机', 'order' => '订单',
-                  'product' => '商品'][$type];
+                  'product' => '商品', 'category' => '分类'][$type];
         $row = (new Database())->query("SELECT * FROM {$table} WHERE id = {$id}")->single();
         if (!$row) {
             return ['ok' => false, 'message' => "{$label} #{$id} 已不存在（可能刚被删掉）"];
@@ -3873,6 +3937,13 @@ TXT;
             if ($linked) {
                 $db->query("UPDATE orders SET deal_id = NULL WHERE deal_id = {$id}")->execute();
                 $removed[] = '解除订单关联 ' . $linked;
+            }
+        } elseif ($type === 'category') {
+            // Mirror CategoryController@destroy: products survive, their category is cleared.
+            $linked = (int) $db->query("SELECT COUNT(*) FROM products WHERE category_id = {$id}")->fetchColumn();
+            if ($linked) {
+                $db->query("UPDATE products SET category_id = NULL WHERE category_id = {$id}")->execute();
+                $removed[] = '清空分类的商品 ' . $linked;
             }
         }
 

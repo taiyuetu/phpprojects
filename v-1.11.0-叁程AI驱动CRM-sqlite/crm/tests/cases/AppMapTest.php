@@ -116,7 +116,7 @@ function test_appmap_documents_the_ai_surface(): void
     assertEquals('read', $kinds['search_records']);
     assertEquals('write', $kinds['update_order']);
     $deleted = array_values(array_filter($tools, static fn($t) => $t['destructive']));
-    assertEquals(6, count($deleted), '六个删除类工具（线索/商机/订单/客户/商品/AI 记录），一个不多');
+    assertEquals(7, count($deleted), '七个删除类工具（线索/商机/订单/客户/商品/分类/AI 记录），一个不多');
     foreach ($tools as $t) {
         assertTrue(in_array($t['kind'], ['read', 'write', 'delete'], true), $t['name'] . ' 必须标明类型');
         assertEquals($t['kind'] === 'delete', $t['destructive'], $t['name'] . ' 的破坏性标记与类型一致');

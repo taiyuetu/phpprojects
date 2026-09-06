@@ -377,7 +377,7 @@ function test_requests_are_bounded_so_answers_come_back_fast(): void
     // prompt grows with capability, not without bound.
     // 工具的参数名必须逐个进提示词（那是能力面：字段清单由表结构生成，24 个工具），
     // 但总量仍要受控——提示词长度就是用户的等待时间。上限随模块增长时要在 CHANGELOG 里说清为什么。
-    assertTrue(textLength($seen['messages'][0]['content']) < 7500,
+    assertTrue(textLength($seen['messages'][0]['content']) < 7900,
         'the system prompt stays bounded (got ' . textLength($seen['messages'][0]['content']) . ')');
     AiClient::$transport = null;
     (new Setting())->setMany(['ai_max_tokens' => '800'], 1);

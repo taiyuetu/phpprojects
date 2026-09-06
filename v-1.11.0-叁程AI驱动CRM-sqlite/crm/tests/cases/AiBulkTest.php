@@ -245,7 +245,7 @@ function test_the_prompt_teaches_the_query_then_act_pattern(): void
     assertContains('一次最多删除 ' . Ai::MAX_DELETES . ' 条', $prompt);
     assertContains('一个 delete_customer 就够', $prompt, '要教它别把级联重复发一遍');
     assertContains('q 留空', $prompt);
-    assertTrue(textLength($prompt) < 7500, '提示词长度仍然受控（' . textLength($prompt) . ' 字）');
+    assertTrue(textLength($prompt) < 7900, '提示词长度仍然受控（' . textLength($prompt) . ' 字）');
 }
 
 /** 搜索的新参数得出现在文档与服务商表里（同源生成，不手写）。 */

@@ -464,7 +464,7 @@ function test_destructive_tools_are_never_auto_executed(): void
     assertTrue(!Ai::hasDestructive([['tool' => 'update_lead', 'args' => ['lead_id' => 1, 'notes' => 'x']]]), '修改也不是');
 
     $tools = Ai::tools();
-    assertEquals(6, count(Ai::destructiveTools()), '删除类工具就 6 个（线索/商机/订单/客户/商品/AI 记录）');
+    assertEquals(7, count(Ai::destructiveTools()), '删除类工具就 7 个（线索/商机/订单/客户/商品/分类/AI 记录）');
     foreach (Ai::destructiveTools() as $t) {
         assertTrue(in_array('confirm', array_keys($tools[$t]['params']), true), "{$t} 必须带 confirm");
         assertTrue(in_array('reason', array_keys($tools[$t]['params']), true), "{$t} 必须带 reason");
@@ -476,11 +476,11 @@ function test_the_tool_table_is_the_single_source_of_truth(): void
 {
     $tools = Ai::tools();
     // 工具表是唯一真相：数量变了，README/流程说明/CHANGELOG 都要跟着改（这条断言就是干这个的）
-    assertEquals(24, count($tools), '工具数量变了要同步文档与提示词');
+    assertEquals(27, count($tools), '工具数量变了要同步文档与提示词');
     $kinds = array_count_values(array_map(static fn($t) => $t['kind'], $tools));
     assertEquals(3, $kinds['read']);
-    assertEquals(15, $kinds['write']);
-    assertEquals(6, $kinds['delete']);
+    assertEquals(17, $kinds['write']);
+    assertEquals(7, $kinds['delete']);
 
     $prompt = Ai::systemPrompt();
     foreach (array_keys($tools) as $name) {
@@ -491,7 +491,7 @@ function test_the_tool_table_is_the_single_source_of_truth(): void
     assertContains('删除', $prompt);
     assertContains('真实 ID', $prompt);
     // 上限是回归闸门而不是目标值：能力增加时提示词会长，但不许无节制地长
-    assertTrue(textLength($prompt) < 7500, '系统提示仍受长度约束（实测 ' . textLength($prompt) . ' 字）');
+    assertTrue(textLength($prompt) < 7900, '系统提示仍受长度约束（实测 ' . textLength($prompt) . ' 字）');
 
     // every tool is reachable: it has a runner, or it is refused as unimplemented
     foreach (array_keys($tools) as $name) {
@@ -541,6 +541,64 @@ function test_delete_routes_exist_for_humans_too(): void
     foreach (['POST /ai/plan', 'POST /ai/apply', 'POST /ai/cancel', 'GET /ai/history'] as $need) {
         assertTrue(in_array($need, $paths, true), "缺少 {$need}");
     }
+}
+
+/** AI 对商品分类要有完整 CRUD：建、搜、看、改、删。 */
+function test_ai_cruds_product_categories(): void
+{
+    $u = permAdmin();
+
+    // 新建（status/sort_order 有默认与显式两种写法）
+    $run = Ai::execute(Ai::validatePlan(
+        [['tool' => 'create_category', 'args' => ['name' => '轴承组', 'sort_order' => '3']]],
+        $u
+    )['actions'], $u);
+    $msg = (string) ($run['results'][0]['message'] ?? '');
+    $id  = (int) ($run['results'][0]['id'] ?? 0);
+    assertTrue($id > 0, 'create_category 返回新分类 id：' . $msg);
+    assertContains('已新建分类', $msg, '回执说明是新建分类');
+    assertEquals('active', (string) (new Category())->find($id)['status'], 'status 默认 active');
+    assertEquals(3, (int) (new Category())->find($id)['sort_order'], 'sort_order 按传入落库');
+
+    // 重名拒绝（categories.name 唯一）
+    $dup = Ai::execute(Ai::validatePlan(
+        [['tool' => 'create_category', 'args' => ['name' => '轴承组']]],
+        $u
+    )['actions'], $u);
+    assertContains('已存在', (string) ($dup['results'][0]['message'] ?? ''), '重名新建被拒绝');
+
+    // 搜索能找到（read：不给编号也行）
+    $search = Ai::execute(Ai::validatePlan(
+        [['tool' => 'search_records', 'args' => ['tables' => 'category', 'q' => '轴承组']]],
+        $u
+    )['actions'], $u);
+    assertContains('共 1 条', (string) ($search['results'][0]['message'] ?? ''), 'search_records(tables:category) 能命中');
+
+    // get_record 看详情
+    $g = Ai::execute(Ai::validatePlan(
+        [['tool' => 'get_record', 'args' => ['type' => 'category', 'id' => (string) $id]]],
+        $u
+    )['actions'], $u);
+    assertContains('name=轴承组', (string) ($g['results'][0]['message'] ?? ''), 'get_record(type:category) 返回分类内容');
+
+    // 挂一个商品后改名 + 删除：商品不被删，只清空分类引用（与页面一致）
+    (new Product())->create(['name' => '分类删除测试商品', 'sku' => 'CATDEL-' . $id,
+        'price' => 1, 'unit' => '件', 'status' => 'active', 'category_id' => $id, 'owner_id' => $u]);
+    $up = Ai::execute(Ai::validatePlan(
+        [['tool' => 'update_category', 'args' => ['category_id' => (string) $id, 'name' => '轴承组改名']]],
+        $u
+    )['actions'], $u);
+    assertContains('已更新', (string) ($up['results'][0]['message'] ?? ''), 'update_category 生效');
+    assertEquals('轴承组改名', (string) (new Category())->find($id)['name'], '分类改名落库');
+
+    $del = Ai::execute(Ai::validatePlan(
+        [['tool' => 'delete_category',
+          'args' => ['category_id' => (string) $id, 'confirm' => true, 'reason' => '整理分类']]],
+        $u
+    )['actions'], $u);
+    assertTrue((bool) (new Category())->find($id) === false, '分类已删除');
+    $still = (int) Database::connection()->query('SELECT COUNT(*) FROM products WHERE category_id = ' . $id)->fetchColumn();
+    assertEquals(0, $still, '删除分类只清空商品引用，不删商品');
 }
 
 runCase();
