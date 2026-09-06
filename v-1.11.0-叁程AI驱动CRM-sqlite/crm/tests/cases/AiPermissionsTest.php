@@ -567,16 +567,19 @@ function test_ai_cruds_product_categories(): void
     )['actions'], $u);
     assertContains('已存在', (string) ($dup['results'][0]['message'] ?? ''), '重名新建被拒绝');
 
-    // 搜索能找到（read：不给编号也行）
+    // 搜索能找到（read：不给编号也行）；返回行带稳定引用 CAT-0000xx 供模型原样引用
     $search = Ai::execute(Ai::validatePlan(
         [['tool' => 'search_records', 'args' => ['tables' => 'category', 'q' => '轴承组']]],
         $u
     )['actions'], $u);
     assertContains('共 1 条', (string) ($search['results'][0]['message'] ?? ''), 'search_records(tables:category) 能命中');
+    $searchRows = $search['results'][0]['rows'] ?? [];
+    $ref = isset($searchRows[0]['code']) ? (string) $searchRows[0]['code'] : '';
+    assertEquals('CAT-' . sprintf('%06d', $id), $ref, '分类搜索结果给稳定引用 CAT-0000xx');
 
-    // get_record 看详情
+    // get_record 看详情（直接给派生引用也能解析）
     $g = Ai::execute(Ai::validatePlan(
-        [['tool' => 'get_record', 'args' => ['type' => 'category', 'id' => (string) $id]]],
+        [['tool' => 'get_record', 'args' => ['type' => 'category', 'id' => $ref]]],
         $u
     )['actions'], $u);
     assertContains('name=轴承组', (string) ($g['results'][0]['message'] ?? ''), 'get_record(type:category) 返回分类内容');
@@ -585,7 +588,7 @@ function test_ai_cruds_product_categories(): void
     (new Product())->create(['name' => '分类删除测试商品', 'sku' => 'CATDEL-' . $id,
         'price' => 1, 'unit' => '件', 'status' => 'active', 'category_id' => $id, 'owner_id' => $u]);
     $up = Ai::execute(Ai::validatePlan(
-        [['tool' => 'update_category', 'args' => ['category_id' => (string) $id, 'name' => '轴承组改名']]],
+        [['tool' => 'update_category', 'args' => ['category_id' => $ref, 'name' => '轴承组改名']]],
         $u
     )['actions'], $u);
     assertContains('已更新', (string) ($up['results'][0]['message'] ?? ''), 'update_category 生效');
@@ -593,7 +596,7 @@ function test_ai_cruds_product_categories(): void
 
     $del = Ai::execute(Ai::validatePlan(
         [['tool' => 'delete_category',
-          'args' => ['category_id' => (string) $id, 'confirm' => true, 'reason' => '整理分类']]],
+          'args' => ['category_id' => $ref, 'confirm' => true, 'reason' => '整理分类']]],
         $u
     )['actions'], $u);
     assertTrue((bool) (new Category())->find($id) === false, '分类已删除');

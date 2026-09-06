@@ -2985,6 +2985,7 @@ TXT;
                 return self::runModify('product', $args);
 
             case 'update_category':
+                $args['category_id'] = self::categoryId((string) ($args['category_id'] ?? ''));
                 return self::runModify('category', $args);
 
             case 'update_lead_status':
@@ -3037,7 +3038,7 @@ TXT;
                 return self::runDelete('product', (int) $args['product_id'], $str('reason'));
 
             case 'delete_category':
-                return self::runDelete('category', (int) $args['category_id'], $str('reason'));
+                return self::runDelete('category', self::categoryId((string) ($args['category_id'] ?? '')), $str('reason'));
 
             case 'delete_ai_request':
                 $id = (int) $args['action_id'];
@@ -3059,7 +3060,25 @@ TXT;
         return ['ok' => false, 'message' => '未实现的工具：' . $tool];
     }
 
-    /** The stage column plus the timestamp the kanban would have written. */
+    /** 分类引用解析：接受数字 ID 或派生引用 CAT-0000xx（不含则 0）。 */
+    private static function categoryId($raw): int
+    {
+        $raw = trim((string) $raw);
+        if ($raw === '') {
+            return 0;
+        }
+        if (ctype_digit($raw)) {
+            return (int) $raw;
+        }
+        $letters = strtoupper((string) preg_replace('~[^A-Za-z]~', '', $raw));
+        $digits  = (int) preg_replace('~[^0-9]~', '', $raw);
+        if ($letters === 'CAT' && $digits > 0 && (new Category())->find($digits)) {
+            return $digits;
+        }
+        return 0;
+    }
+
+    /** 商机阶段补丁 */
     private static function stagePatch(string $stage): array
     {
         $patch = ['stage' => $stage];
@@ -3159,7 +3178,9 @@ TXT;
                              'match' => ['public_code'],
                              'show'  => ['public_code', 'name', 'sku', 'partnumber', 'oem', 'application', 'unit', 'price', 'status'],
                              'filters' => ['status' => 'status', 'category' => 'category']],
-            'category'   => ['table' => 'categories',  'label' => '分类', 'owner' => '',
+            'category'   => ['table' => 'categories',  'label' => '分类', 'owner' => '', 'prefix' => 'CAT',
+                             // 分类没有 public_code 列；prefix 让搜索结果仍带稳定引用 CAT-0000xx（由 id 派生），
+                             // 与其它记录一样可被模型原样引用，解析端认得这种写法。
                              'match' => ['name'],
                              'show'  => ['name', 'sort_order', 'status'],
                              'filters' => ['status' => 'status']],
@@ -3441,12 +3462,13 @@ TXT;
         [$model, , $label, $ownerCol] = $map[$type];
         $instance = new $model();
 
-        // id 三种写法都能解析：纯数字 ID、稳定编号（CUS-000007 / DEAL-000003）、
+        // id 三种写法都能解析：纯数字 ID、稳定编号（CUS-000007 / DEAL-000003 / 分类 CAT-00000N）、
         // 订单号（order 类型专有）。先别把编号 (int) 成 0，否则 code 永远查不到。
         if (ctype_digit($raw)) {
             $id = (int) $raw;
         } else {
-            $id = (int) ($instance->idFromReference($raw) ?? 0);
+            $id = $type === 'category' ? self::categoryId($raw)
+                : (int) ($instance->idFromReference($raw) ?? 0);
             if ($id === 0 && $type === 'order') {
                 $byNumber = $instance->findBy('order_number', $raw);
                 $id = $byNumber ? (int) $byNumber['id'] : 0;
@@ -3565,6 +3587,8 @@ TXT;
             $raw = trim((string) ($args[$key] ?? ''));
             if ($type === 'ai_request') {
                 $id = (int) $raw;
+            } elseif ($type === 'category') {
+                $id = self::categoryId($raw);
             } elseif ($type === 'order' && !is_numeric($raw) && stripos($raw, 'ORD') === 0) {
                 $byNumber = (new Order())->findBy('order_number', $raw);
                 $id = $byNumber ? (int) $byNumber['id'] : 0;
