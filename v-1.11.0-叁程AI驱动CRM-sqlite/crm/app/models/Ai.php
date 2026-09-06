@@ -2116,6 +2116,33 @@ TXT;
             }
         }
 
+        // 商品分类意图：分类是独立主数据（categories 表），不是“商品的一种属性”。
+        // 离线演示也认得：库内商品为 0 不等于没有分类。
+        if (preg_match('~(?:查|搜|找|看|列(?:出|一下)?|有哪些|多少)\s*(?:一下)?\s*(?:所有|全部)?\s*(?:商品分类|商品类别|分类|品类|类别)(.*)$~u',
+            $instruction, $cm)) {
+            $args = ['tables' => 'category'];
+            $rest = trim((string) $cm[1]);
+            if ($rest !== '' && !preg_match('~^[，,。!！?？：:；;\s]*$~u', $rest)) {
+                $args['q'] = $rest;
+            } else {
+                $args['all'] = true;   // “有哪些分类”就是整表浏览（分类本来就是小表）
+            }
+            return json_encode([
+                'reply' => '先把分类表列出来（分类是独立主数据，先确认库内有哪些再动手）。',
+                'actions' => [['tool' => 'search_records', 'args' => $args, 'reason' => '用户要查看商品分类']],
+            ], JSON_UNESCAPED_UNICODE);
+        }
+        if (preg_match('~(?:新建|新增|添加|建)\s*(?:一个)?\s*(?:商品)?(?:分类|品类|类别)\s*[:：]?\s*[「“”]?([^，,。!！?？；;\s]{1,40})~u',
+            $instruction, $cm)) {
+            $cname = trim((string) $cm[1]);
+            if ($cname !== '' && $cname !== '目录') {
+                return json_encode([
+                    'reply' => '已按你的话准备新增商品分类：' . $cname . '。',
+                    'actions' => [['tool' => 'create_category', 'args' => ['name' => $cname], 'reason' => '用户要求新增商品分类']],
+                ], JSON_UNESCAPED_UNICODE);
+            }
+        }
+
         // “把商品 BRG-6206 的价格改成 3.2”：演示模型也不许凭空写 id，
         // 所以第一轮只发查询，第二轮再拿查到的编号出 update_product
         if (preg_match('~(?:把|将|帮)\s*(?:商品|产品)\s*([^，,。\s]{1,30})~u', $instruction, $qm)

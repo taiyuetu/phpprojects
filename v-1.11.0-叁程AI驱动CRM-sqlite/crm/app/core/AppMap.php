@@ -622,6 +622,7 @@ class AppMap
 
         $lines[] = '人员只存于 users 一行：业务表只有 owner_id / user_id / uploaded_by，没有姓名字段可写。';
         $lines[] = '每条记录都有稳定编号：客户 CUS-000007、线索 LEAD-000007、商机 DEAL-000007、订单用 order_number（ORD-2026-007）。引用记录一律优先用编号（*_id 参数接受编号或数字 ID），编号请从 <found>、数据快照或搜索结果里原样复制。';
+        $lines[] = '商品分类 categories 是独立主数据（非商品属性，商品数≠分类数）：可 search/建/改/删，删除只清空商品引用不删商品；name 唯一，引用用数字 ID。';
         $lines[] = '销售只能操作自己负责或未分配（公海）的记录；删除类动作必须带 confirm:true 与 reason，且永远需要人工“确认执行”；日期写 YYYY-MM-DD，金额只写数字。';
 
         return textTrim(implode("\n", $lines), $limit);
