@@ -5,6 +5,7 @@
  */
 $action = url('/products/' . (int) $product['id']);
 $submitText = '保存修改';
+$editing = true;
 ?>
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h3 class="mb-0">编辑商品

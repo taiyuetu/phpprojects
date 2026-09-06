@@ -31,16 +31,27 @@ class Product extends Model
         'public_code' => ['label' => '编号', 'writable' => false, 'csv' => true],
         'sku'         => ['label' => 'SKU', 'type' => 'string', 'searchable' => true,
                           'unique' => true, 'max' => 60, 'csv' => true],
+        'partnumber'  => ['label' => '内部编码', 'type' => 'string', 'searchable' => true,
+                          'max' => 60, 'csv' => true],
         'category'    => ['label' => '分类', 'searchable' => true, 'csv' => true],
         'brand'       => ['label' => '品牌', 'searchable' => true, 'csv' => true],
+        'oem'         => ['label' => 'OEM', 'type' => 'string', 'searchable' => true, 'csv' => true,
+                          'form' => ['width' => 'col-md-6', 'placeholder' => '如：Acme 贴牌', 'hint' => 'OEM 贴牌标识（客户品牌或专用编号），没有可不填。']],
         'spec'        => ['label' => '规格', 'searchable' => true, 'csv' => true],
+        'application' => ['label' => '车型', 'type' => 'string', 'searchable' => true, 'csv' => true,
+                          'form' => ['width' => 'col-md-6', 'placeholder' => '如：丰田卡罗拉 / 大众迈腾',
+                                     'hint' => '适用车型/应用场景，多个用顿号分隔。']],
         'unit'        => ['label' => '单位', 'type' => 'enum', 'default' => '件', 'strict' => true, 'csv' => true],
         'price'       => ['label' => '单价', 'type' => 'number', 'required' => true,
                           'requiredMsg' => '单价必须填数字（没有价格就填 0，别留空）。',
                           'min' => 0, 'max' => 100000000, 'csv' => true],
         'cost'        => ['label' => '参考价', 'type' => 'number', 'min' => 0, 'max' => 100000000, 'csv' => true],
+        'purchase_price' => ['label' => '采购价格', 'type' => 'number', 'min' => 0, 'max' => 100000000,
+                             'csv' => true, 'form' => ['width' => 'col-md-6', 'placeholder' => '如：450.00',
+                             'hint' => '进货成本价，用于毛利测算。']],
         'status'      => ['label' => '状态', 'type' => 'enum', 'default' => 'active', 'csv' => true],
-        'notes'       => ['label' => '备注', 'type' => 'text', 'searchable' => true, 'csv' => true],
+        'notes'       => ['label' => '备注', 'type' => 'text', 'searchable' => true, 'csv' => true,
+                          'form' => ['width' => 'col-md-12', 'rows' => 2, 'maxlength' => 1000]],
     ];
 
     /** 单位可选值不在数据库里（订单明细共用同一套，见 OrderItem::unitOptions） */
@@ -109,7 +120,9 @@ class Product extends Model
         $params = [];
 
         if ($search !== '') {
-            $cols = ['name', 'sku', 'brand', 'spec', 'category', 'notes', 'public_code'];
+            // 关键词扫描的列 = 注册表里标了 searchable 的列（加新字段标 searchable 即自动可搜），
+            // 另补 public_code：系统编号不在注册表语义里，但搜索编号是刚需。
+            $cols = array_values(array_unique(array_merge($this->searchableColumns(), ['public_code'])));
             $ors = [];
             foreach ($cols as $col) {
                 $ors[] = "{$alias}.{$col} LIKE :q_{$col}";
@@ -153,7 +166,7 @@ class Product extends Model
     public function pickList(int $limit = 800): array
     {
         $rows = $this->db()->query(
-            "SELECT id, public_code, name, sku, category, brand, spec, unit, price, status
+            "SELECT id, public_code, name, sku, partnumber, category, brand, oem, spec, unit, price, status
                FROM products
               ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, name ASC
               LIMIT " . max(10, min(2000, $limit))
@@ -169,6 +182,8 @@ class Product extends Model
                 'code'  => $code,
                 'name'  => (string) $r['name'],
                 'sku'   => (string) ($r['sku'] ?? ''),
+                'partnumber' => (string) ($r['partnumber'] ?? ''),
+                'oem'   => (string) ($r['oem'] ?? ''),
                 'unit'  => (string) ($r['unit'] ?? '件'),
                 'price' => (float) ($r['price'] ?? 0),
                 'spec'  => (string) ($r['spec'] ?? ''),
@@ -180,13 +195,23 @@ class Product extends Model
         return $out;
     }
 
-    /** 搜索框用的“可搜索文本”：编号 名称 SKU 品牌 规格 分类（一次拼好，前端不再拼） */
+    /**
+     * 搜索框用的“可搜索文本”：编号 + 注册表里标了 searchable 的文本列（含 OEM/内部编码等）。
+     * 一次拼好，前端不再拼。加字段标 searchable 即自动可搜。
+     */
     public static function haystack(array $p): string
     {
-        return textLower(implode(' ', array_filter([
-            $p['code'] ?? '', $p['name'] ?? '', $p['sku'] ?? '', $p['brand'] ?? '',
-            $p['spec'] ?? '', $p['category'] ?? '',
-        ])));
+        $parts = [(string) ($p['code'] ?? '')];
+        foreach (static::$fields as $name => $meta) {
+            if (empty($meta['searchable']) || !array_key_exists($name, $p)) {
+                continue;
+            }
+            $v = $p[$name] ?? '';
+            if ($v !== null && $v !== '') {
+                $parts[] = (string) $v;
+            }
+        }
+        return textLower(implode(' ', array_filter($parts)));
     }
 
     // -------------------------------------------------------------- 校验/引用
@@ -516,7 +541,7 @@ class Product extends Model
                 // 更新：缺失列用库中原值补齐再走同一套业务校验，落库只写文件里有的列
                 $existing = (array) $this->find($selfId);
                 $merged = $input;
-                foreach (['name', 'sku', 'category', 'brand', 'spec', 'unit', 'price', 'cost', 'status', 'notes'] as $f) {
+                foreach (['name', 'sku', 'partnumber', 'category', 'brand', 'spec', 'unit', 'price', 'cost', 'status', 'notes'] as $f) {
                     if (($merged[$f] ?? '') === '') {
                         $old = $existing[$f] ?? '';
                         $merged[$f] = $old === null ? '' : (string) $old;
@@ -585,6 +610,7 @@ class Product extends Model
             'name'        => ['商品名称', '商品', '产品名称', '品名', 'name'],
             'public_code' => ['public_code', 'public code'],
             'sku'         => ['货号'],
+            'partnumber'  => ['内部编码', '料号', '图号'],
             'category'    => ['category'],
             'brand'       => ['brand'],
             'spec'        => ['型号'],

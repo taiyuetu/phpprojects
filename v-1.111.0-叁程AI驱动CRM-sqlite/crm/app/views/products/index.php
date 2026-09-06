@@ -62,6 +62,32 @@ $filterQsUrl = $filterQs ? '?' . $filterQs : '';
         <span class="small text-muted ms-auto">共 <?= (int) $total ?> 个商品</span>
     </div>
     <div class="table-responsive">
+        <?php
+        // 扩展列 = 注册表里标了 'list' => true 的字段（按声明顺序自动追加为列表列），
+        // 想让它上列表页就在 Product::$fields 对应行加 'list' => true，视图零改动。
+        $cols       = Fields::columns('products', Product::fieldDefsStatic());
+        $listExtras = [];
+        foreach (Product::fieldDefsStatic() as $fn => $meta) {
+            if (!empty($meta['list'])) {
+                $listExtras[$fn] = ($cols[$fn] ?? $meta) + ['label' => $meta['label'] ?? $fn];
+            }
+        }
+        $extraCount = count($listExtras);
+        $extraCell = static function (string $fn, array $meta, array $p) use ($cols): string {
+            $type  = (string) (($cols[$fn] ?? $meta)['type'] ?? ($meta['type'] ?? 'string'));
+            $value = $p[$fn] ?? null;
+            if ($value === null || $value === '') {
+                return '<span class="text-muted">—</span>';
+            }
+            if ($type === 'money' || $type === 'number') {
+                return money((float) $value);
+            }
+            if ($type === 'bool') {
+                return !empty($value) ? '是' : '否';
+            }
+            return e((string) $value);
+        };
+        ?>
         <table class="table mb-0 align-middle">
             <thead>
                 <tr class="text-muted small">
@@ -71,13 +97,16 @@ $filterQsUrl = $filterQs ? '?' . $filterQs : '';
                     <th class="text-end">单价</th>
                     <th>单位</th>
                     <th class="text-end">被用 / 售出额</th>
+                    <?php foreach ($listExtras as $fn => $meta): ?>
+                        <th><?= e((string) $meta['label']) ?></th>
+                    <?php endforeach; ?>
                     <th>状态</th>
                     <th class="text-end">操作</th>
                 </tr>
             </thead>
             <tbody>
             <?php if (!$products): ?>
-                <tr><td colspan="8" class="text-center text-muted p-4">
+                <tr><td colspan="<?= 8 + $extraCount ?>" class="text-center text-muted p-4">
                     <?= $q !== '' || $status !== '' || $category !== '' ? '没有符合筛选条件的商品。' : '商品库还是空的，先「新增商品」，之后商机与订单的明细就从这里选。' ?>
                 </td></tr>
             <?php endif; ?>
@@ -88,6 +117,9 @@ $filterQsUrl = $filterQs ? '?' . $filterQs : '';
                         <a href="<?= url('/products/' . (int) $p['id']) ?>" class="fw-semibold text-decoration-none"><?= e((string) $p['name']) ?></a>
                         <?php if (($p['sku'] ?? '') !== ''): ?>
                             <div class="small text-muted">SKU：<?= e((string) $p['sku']) ?></div>
+                        <?php endif; ?>
+                        <?php if (($p['partnumber'] ?? '') !== ''): ?>
+                            <div class="small text-muted">内部编码：<?= e((string) $p['partnumber']) ?></div>
                         <?php endif; ?>
                         <?php if (($p['spec'] ?? '') !== ''): ?>
                             <div class="small text-muted"><?= e((string) $p['spec']) ?></div>
@@ -105,6 +137,9 @@ $filterQsUrl = $filterQs ? '?' . $filterQs : '';
                             <div class="text-muted"><?= money((float) $p['sold_amount']) ?></div>
                         <?php endif; ?>
                     </td>
+                    <?php foreach ($listExtras as $fn => $meta): ?>
+                        <td class="small"><?= $extraCell($fn, $meta, $p) ?></td>
+                    <?php endforeach; ?>
                     <td>
                         <span class="badge <?= $p['status'] === 'active' ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary' ?>">
                             <?= e(Product::statusLabel((string) $p['status'])) ?>

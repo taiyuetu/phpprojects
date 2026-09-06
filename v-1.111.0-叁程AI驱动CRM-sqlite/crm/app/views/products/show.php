@@ -21,19 +21,44 @@
 <div class="row g-3 mb-3">
     <div class="col-md-8">
         <div class="card card-table p-3 h-100">
+            <?php
+            // 资料表 = 注册表声明顺序自动渲染；已在标题栏展示的（名称/编号/状态）不再重复。
+            // 以后新增字段（在 Product::$fields 里声明并标 label）会零视图改动自动出现在这里。
+            $cols    = Fields::columns('products', Product::fieldDefsStatic());
+            $headerY = ['public_code', 'name', 'status'];
+            $detailRows = [];
+            foreach (Product::fieldDefsStatic() as $fn => $meta) {
+                if (in_array($fn, $headerY, true) || empty($meta['label'])) {
+                    continue;
+                }
+                $detailRows[$fn] = $cols[$fn] ?? $meta;
+            }
+            $cell = static function (string $fn, array $meta, array $p) use ($cols): string {
+                $type  = (string) (($cols[$fn] ?? $meta)['type'] ?? ($meta['type'] ?? 'string'));
+                $value = $p[$fn] ?? null;
+                if ($value === null || $value === '') {
+                    return '—';
+                }
+                if ($type === 'money' || $type === 'number') {
+                    return money((float) $value);
+                }
+                if ($type === 'bool') {
+                    return !empty($value) ? '是' : '否';
+                }
+                if ($type === 'text') {
+                    return '<span class="text-prewrap">' . nl2br(e((string) $value)) . '</span>';
+                }
+                return e((string) $value);
+            };
+            ?>
             <table class="table table-sm mb-0">
                 <tbody>
-                <tr><th class="text-muted" style="width:120px">SKU</th><td><?= e((string) ($product['sku'] ?: '—')) ?></td></tr>
-                <tr><th class="text-muted">分类 / 品牌</th>
-                    <td><?= e((string) ($product['category'] ?: '—')) ?> / <?= e((string) ($product['brand'] ?: '—')) ?></td></tr>
-                <tr><th class="text-muted">规格</th><td><?= e((string) ($product['spec'] ?: '—')) ?></td></tr>
-                <tr><th class="text-muted">单价 / 单位</th>
-                    <td><?= money((float) $product['price']) ?> / <?= e((string) $product['unit']) ?>
-                        <?php if (isset($product['cost']) && $product['cost'] !== null && $product['cost'] !== ''): ?>
-                            <span class="text-muted small">（参考价 <?= money((float) $product['cost']) ?>）</span>
-                        <?php endif; ?>
-                    </td></tr>
-                <tr><th class="text-muted">备注</th><td class="text-prewrap"><?= nl2br(e((string) ($product['notes'] ?: '—'))) ?></td></tr>
+                <?php $first = true; ?>
+                <?php foreach ($detailRows as $fn => $meta): ?>
+                    <tr><th class="text-muted" <?= $first ? 'style="width:120px"' : '' ?>><?= e((string) ($meta['label'] ?? $fn)) ?></th>
+                        <td><?= $cell($fn, (array) $meta, $product) ?></td></tr>
+                    <?php $first = false; ?>
+                <?php endforeach; ?>
                 <tr><th class="text-muted">负责人</th><td><?= ownerBlock($product['owner_id'] ?? null) ?></td></tr>
                 </tbody>
             </table>

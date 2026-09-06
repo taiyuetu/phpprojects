@@ -3021,6 +3021,46 @@ TXT;
         return Setting::get('ai_allow_delete', '1') !== '0';
     }
 
+    /**
+     * 注册表里标了 searchable 的本地文本列（含 string/text/email/phone）。
+     * 只返回真实存在的列；数值/日期/枚举/id 列不进关键词 LIKE 搜索（搜 “450” 不该撞上金额）。
+     * 供 searchSurfaces 的 match 自动派生 —— 加字段标 searchable 即自动可搜。
+     */
+    private static function registrySearchableTextCols(string $table): array
+    {
+        $declared = Fields::declaredFor($table);
+        if ($declared === []) {
+            return [];
+        }
+        $textTypes = ['string', 'text', 'email', 'phone', 'url'];
+        $real = [];
+        foreach (Schema::columns($table) as $c) {
+            $real[(string) $c['name']] = true;
+        }
+        $out = [];
+        foreach ($declared as $name => $meta) {
+            if (empty($meta['searchable']) || !isset($real[$name])) {
+                continue;
+            }
+            $type = (string) ($meta['type'] ?? 'string');
+            if (in_array($type, $textTypes, true)) {
+                $out[] = $name;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * 一张搜索 surface 的关键词匹配列 = 手工基础列 ∪ 注册表 searchable 本地文本列。
+     * 手工基础列保留（含跨表 JOIN 列，注册表表达不了）；新加的注册表文本列自动并入。
+     */
+    private static function surfaceMatchCols(array $surface): array
+    {
+        $base = (array) ($surface['match'] ?? []);
+        $auto = self::registrySearchableTextCols((string) ($surface['table'] ?? ''));
+        return array_values(array_unique(array_merge($base, $auto)));
+    }
+
     /** Searchable surfaces: table, the columns a keyword may match, owner column. */
     public static function searchSurfaces(): array
     {
@@ -3054,8 +3094,9 @@ TXT;
                              'match' => ['description', 'type'],
                              'show'  => ['type', 'description', 'customer_id']],
             'product'    => ['table' => 'products',    'label' => '商品', 'owner' => 'owner_id', 'prefix' => 'PROD',
-                             'match' => ['public_code', 'name', 'sku', 'brand', 'spec', 'category', 'notes'],
-                             'show'  => ['public_code', 'name', 'sku', 'unit', 'price', 'status'],
+                             // 系统编号列手工保留；注册表 searchable 文本列由 surfaceMatchCols 自动并入
+                             'match' => ['public_code'],
+                             'show'  => ['public_code', 'name', 'sku', 'partnumber', 'oem', 'application', 'unit', 'price', 'status'],
                              'filters' => ['status' => 'status', 'category' => 'category']],
             'ai_request' => ['table' => 'ai_actions',  'label' => 'AI 记录', 'owner' => 'user_id',
                              'match' => ['instruction', 'reply', 'status', 'error'],
@@ -3157,8 +3198,11 @@ TXT;
         $binds = [];
         if ($term !== '') {
             $ors = '';
-            foreach ($surface['match'] as $col) {
-                $ors .= ($ors ? ' OR ' : '') . "CAST({$col} AS TEXT) LIKE :p{$col}";
+            // match = 手工基础列 ∪ 注册表 searchable 文本列（加字段标 searchable 即自动可搜，
+            // 与列表页关键词搜索同一套派生逻辑，不会再出现“页面搜得到、AI 搜不到”）。
+            $match = self::surfaceMatchCols($surface);
+            foreach ($match as $col) {
+                $ors .= ($ors ? ' OR ' : '') . "CAST({$col} AS TEXT) LIKE :p{$col} ESCAPE '\\'";
                 $binds[':p' . $col] = self::likeValue($term);
             }
             $where[] = '(' . $ors . ')';
@@ -3181,13 +3225,13 @@ TXT;
                 $where[] = '(' . implode(' OR ', $ors) . ')';
                 continue;
             }
-            $where[] = "CAST({$col} AS TEXT) LIKE :f_{$name}";
+            $where[] = "CAST({$col} AS TEXT) LIKE :f_{$name} ESCAPE '\\'";
             $binds[':f_' . $name] = self::likeValue($value);
         }
         if (!empty($filters['owner'])) {
             // 负责人只存在 users 一行，所以要 JOIN 才能按姓名过滤
             $where[] = 'EXISTS (SELECT 1 FROM users uu WHERE uu.id = ' . $surface['table'] . '.' . $surface['owner']
-                . " AND uu.name LIKE :f_owner)";
+                . " AND uu.name LIKE :f_owner ESCAPE '\\')";
             $binds[':f_owner'] = self::likeValue($filters['owner']);
         }
         // 时间范围：所有可搜索表都有 created_at，所以这一组条件对全部表通用。

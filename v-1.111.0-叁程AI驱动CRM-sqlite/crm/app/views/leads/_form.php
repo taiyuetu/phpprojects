@@ -5,8 +5,6 @@
 $l = $old ?? $lead ?? [];
 ?>
 <div class="row g-3 mb-3">
-    <?php $fieldsOwner = new Lead(); $values = $l ?? []; ?>
-    <?php include APP_PATH . '/views/partials/_fields_auto.php'; ?>
     <div class="col-md-12">
         <label class="form-label">线索标题 *</label>
         <input type="text" name="title" class="form-control" value="<?= e($l['title'] ?? '') ?>" required>
@@ -112,6 +110,9 @@ $l = $old ?? $lead ?? [];
         <label class="form-label">备注</label>
         <textarea name="notes" class="form-control" rows="3"><?= e($l['notes'] ?? '') ?></textarea>
     </div>
+    <?php /* —— 扩展字段自动区：Lead::$fields 里标了 'form' 的新增字段自动出现在这里，无需改本视图 —— */ ?>
+    <?php $fieldsOwner = new Lead(); $values = $l ?? []; ?>
+    <?php include APP_PATH . '/views/partials/_fields_auto.php'; ?>
 </div>
 
 <script>

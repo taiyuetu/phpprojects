@@ -15,10 +15,11 @@ $val = static fn(string $k, $d = '') => e((string) (($old[$k] ?? $d)));
 <?php endif; ?>
 
 <form method="POST" action="<?= e($action ?? url('/products')) ?>" class="card card-table p-4">
+    <?php if (!empty($editing)): ?>
+        <input type="hidden" name="_method" value="PUT">
+    <?php endif; ?>
     <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
     <div class="row g-3">
-        <?php $fieldsOwner = new Product(); $values = $old ?? []; ?>
-        <?php include APP_PATH . '/views/partials/_fields_auto.php'; ?>
         <div class="col-md-6">
             <label class="form-label">商品名称 <span class="text-danger">*</span></label>
             <input type="text" name="name" class="form-control" required maxlength="150"
@@ -32,15 +33,10 @@ $val = static fn(string $k, $d = '') => e((string) (($old[$k] ?? $d)));
             <div class="form-text">填了就不能与别的商品重复；留空则不做约束。</div>
         </div>
         <div class="col-md-3">
-            <label class="form-label">状态</label>
-            <select name="status" class="form-select">
-                <?php foreach (Product::statusOptions() as $value => $label): ?>
-                    <option value="<?= e($value) ?>" <?= ($old['status'] ?? 'active') === $value ? 'selected' : '' ?>>
-                        <?= e($label) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-            <div class="form-text">停用后不再出现在选择框里，历史订单不受影响。</div>
+            <label class="form-label">内部编码</label>
+            <input type="text" name="partnumber" class="form-control" maxlength="60" value="<?= $val('partnumber') ?>"
+                   placeholder="如：P-8839">
+            <div class="form-text">企业内部的料号/图号，客户侧不一定认这个编号。</div>
         </div>
 
         <div class="col-md-3">
@@ -56,6 +52,18 @@ $val = static fn(string $k, $d = '') => e((string) (($old[$k] ?? $d)));
             <label class="form-label">规格 / 型号</label>
             <input type="text" name="spec" class="form-control" maxlength="150" value="<?= $val('spec') ?>"
                    placeholder="如：6206-2RS / 内径30 外径62 宽16">
+        </div>
+
+        <div class="col-md-3">
+            <label class="form-label">状态</label>
+            <select name="status" class="form-select">
+                <?php foreach (Product::statusOptions() as $value => $label): ?>
+                    <option value="<?= e($value) ?>" <?= ($old['status'] ?? 'active') === $value ? 'selected' : '' ?>>
+                        <?= e($label) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <div class="form-text">停用后不再出现在选择框里，历史订单不受影响。</div>
         </div>
 
         <div class="col-md-3">
@@ -80,10 +88,9 @@ $val = static fn(string $k, $d = '') => e((string) (($old[$k] ?? $d)));
                 <?php endforeach; ?>
             </select>
         </div>
-        <div class="col-md-12">
-            <label class="form-label">备注</label>
-            <textarea name="notes" class="form-control" rows="2" maxlength="1000"><?= $val('notes') ?></textarea>
-        </div>
+        <?php /* —— 扩展字段（自动渲染区）：Product::$fields 里标了 'form' 的列自动出现在这里，无需改本视图。 —— */ ?>
+        <?php $fieldsOwner = new Product(); $values = $old ?? []; ?>
+        <?php include APP_PATH . '/views/partials/_fields_auto.php'; ?>
     </div>
 
     <div class="d-flex gap-2 mt-4">

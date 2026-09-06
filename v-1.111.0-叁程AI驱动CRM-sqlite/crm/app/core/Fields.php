@@ -230,9 +230,16 @@ class Fields
         $label = (string) ($field['label'] ?? $name);
         $required = !empty($form['required']) || !empty($field['required']);
         $width = (string) ($form['width'] ?? 'col-md-6');
+        $placeholder = (string) ($form['placeholder'] ?? ($field['placeholder'] ?? ''));
+        $hint = (string) ($form['hint'] ?? ($field['hint'] ?? ''));
+        $maxlength = (int) ($form['maxlength'] ?? 0);
+        $rows = max(2, (int) ($form['rows'] ?? 3));
         $val = is_array($value) ? ($value[$name] ?? null) : $value;
         $valStr = e($val === null ? '' : (string) $val);
         $reqAttr = $required ? ' required' : '';
+        $phAttr = $placeholder !== '' ? ' placeholder="' . e($placeholder) . '"' : '';
+        $maxAttr = $maxlength > 0 ? ' maxlength="' . $maxlength . '"' : '';
+        $hintHtml = $hint !== '' ? '<div class="form-text">' . e($hint) . '</div>' : '';
 
         $out = '<div class="' . e($width) . '">';
         if ($type === 'bool') {
@@ -240,7 +247,8 @@ class Fields
             $out .= '<div class="form-check mt-4">'
                  . '<input class="form-check-input" type="checkbox" name="' . e($name)
                  . '" id="field_' . e($name) . '" value="1"' . $checked . '>'
-                 . '<label class="form-check-label" for="field_' . e($name) . '">' . e($label) . '</label></div>';
+                 . '<label class="form-check-label" for="field_' . e($name) . '">' . e($label) . '</label></div>'
+                 . $hintHtml;
         } else {
             $out .= '<label class="form-label">' . e($label)
                   . ($required ? ' <span class="text-danger">*</span>' : '') . '</label>';
@@ -258,8 +266,9 @@ class Fields
                 }
                 $out .= $sel . '</select>';
             } elseif ($type === 'text') {
-                $out .= '<textarea name="' . e($name) . '" class="form-control" rows="3"' . $reqAttr
-                      . '>' . $valStr . '</textarea>';
+                $out .= '<textarea name="' . e($name) . '" class="form-control" rows="' . $rows . '"'
+                      . $phAttr . $maxAttr . $reqAttr
+                      . '>' . $valStr . '</textarea>' . $hintHtml;
             } else {
                 $inputType = [
                     'email' => 'email', 'int' => 'number', 'number' => 'number',
@@ -268,7 +277,8 @@ class Fields
                 $step = ($type === 'number' || $type === 'money') ? ' step="any"'
                       : (($type === 'int') ? ' step="1"' : '');
                 $out .= '<input type="' . $inputType . '" name="' . e($name) . '"'
-                      . ' class="form-control" value="' . $valStr . '"' . $step . $reqAttr . '>';
+                      . ' class="form-control" value="' . $valStr . '"'
+                      . $phAttr . $step . $maxAttr . $reqAttr . '>' . $hintHtml;
             }
         }
         return $out . '</div>';

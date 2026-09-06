@@ -5,8 +5,6 @@
 $o = $old ?? $order ?? [];
 ?>
 <div class="row g-3 mb-3">
-    <?php $fieldsOwner = new Order(); $values = $o ?? []; ?>
-    <?php include APP_PATH . '/views/partials/_fields_auto.php'; ?>
     <div class="col-md-6">
         <label class="form-label">订单编号 *</label>
         <input type="text" name="order_number" class="form-control" value="<?= e($o['order_number'] ?? $orderNumber ?? '') ?>" required>
@@ -78,6 +76,9 @@ $o = $old ?? $order ?? [];
         <label class="form-label">备注</label>
         <textarea name="notes" class="form-control" rows="2"><?= e($o['notes'] ?? '') ?></textarea>
     </div>
+    <?php /* —— 扩展字段自动区：Order::$fields 里标了 'form' 的新增字段自动出现在这里，无需改本视图 —— */ ?>
+    <?php $fieldsOwner = new Order(); $values = $o ?? []; ?>
+    <?php include APP_PATH . '/views/partials/_fields_auto.php'; ?>
 </div>
 
 <!-- 商品明细 -->

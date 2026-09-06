@@ -18,8 +18,6 @@ $dealValue = (float) ($d['value'] ?? 0);
 $valueAuto = ($dealValue == 0.0 || abs($dealValue - $formRowsTotal) < 0.005) ? '1' : '0';
 ?>
 <div class="row g-3 mb-3">
-    <?php $fieldsOwner = new Deal(); $values = $d ?? []; ?>
-    <?php include APP_PATH . '/views/partials/_fields_auto.php'; ?>
     <div class="col-md-8">
         <label class="form-label">商机名称 *</label>
         <input type="text" name="title" class="form-control" value="<?= e($d['title'] ?? '') ?>" required>
@@ -60,6 +58,9 @@ $valueAuto = ($dealValue == 0.0 || abs($dealValue - $formRowsTotal) < 0.005) ? '
         <label class="form-label">预计成交日期</label>
         <input type="date" name="close_date" class="form-control" value="<?= e(is_string($d['close_date'] ?? null) ? substr($d['close_date'], 0, 10) : '') ?>">
     </div>
+    <?php /* —— 扩展字段自动区：Deal::$fields 里标了 'form' 的新增字段自动出现在这里，无需改本视图 —— */ ?>
+    <?php $fieldsOwner = new Deal(); $values = $d ?? []; ?>
+    <?php include APP_PATH . '/views/partials/_fields_auto.php'; ?>
 </div>
 
 <!-- 商品明细：与订单表单同一份局部，任何阶段都可见、可先填。

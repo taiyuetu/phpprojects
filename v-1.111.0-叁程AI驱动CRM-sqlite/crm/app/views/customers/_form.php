@@ -5,8 +5,6 @@
 $c = $old ?? $customer ?? [];
 ?>
 <div class="row g-3 mb-3">
-    <?php $fieldsOwner = new Customer(); $values = $c ?? []; ?>
-    <?php include APP_PATH . '/views/partials/_fields_auto.php'; ?>
     <div class="col-md-6">
         <label class="form-label">姓名 *</label>
         <input type="text" name="name" class="form-control" value="<?= e($c['name'] ?? '') ?>" required>
@@ -90,4 +88,7 @@ $c = $old ?? $customer ?? [];
         <label class="form-label">备注</label>
         <textarea name="notes" class="form-control" rows="3"><?= e($c['notes'] ?? '') ?></textarea>
     </div>
+    <?php /* —— 扩展字段自动区：Customer::$fields 里标了 'form' 的新增字段自动出现在这里，无需改本视图 —— */ ?>
+    <?php $fieldsOwner = new Customer(); $values = $c ?? []; ?>
+    <?php include APP_PATH . '/views/partials/_fields_auto.php'; ?>
 </div>
