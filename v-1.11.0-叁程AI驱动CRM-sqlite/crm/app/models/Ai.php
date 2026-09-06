@@ -619,7 +619,7 @@ class Ai extends Model
                 'at_least_one' => true,
                 'hint'   => '只传要改的字段（name / sort_order / status）。分类改名后，已挂该分类的商品会跟着显示新名字。',
                 'params' => array_merge(
-                    ['category_id' => ['label' => '分类 ID', 'type' => 'category_id', 'required' => true]],
+                    ['category_id' => ['label' => '分类（数字 ID/CAT-编号/分类名）', 'type' => 'category_id', 'required' => true]],
                     self::fieldsFor('categories')
                 ),
             ],
@@ -677,8 +677,8 @@ class Ai extends Model
             'delete_category' => [
                 'label'  => '删除商品分类',
                 'kind'   => 'delete',
-                'hint'   => '删除后该分类下商品不会删，只是分类被清空（商品仍在商品库）。',
-                'params' => self::deleteParams('category_id', '分类 ID', 'category_id'),
+                'hint'   => '删除后该分类下商品不会删，只是分类被清空（商品仍在商品库）。category_id 可写数字 ID、CAT-编号或分类名。',
+                'params' => self::deleteParams('category_id', '分类（数字 ID/CAT-编号/分类名）', 'category_id'),
             ],
             'delete_ai_request' => [
                 'label'  => '删除一条 AI 请求记录',
@@ -2622,7 +2622,13 @@ TXT;
             case 'table_list':
                 $given = is_array($value) ? $value : preg_split('~[,，\s]+~u', (string) $value, -1, PREG_SPLIT_NO_EMPTY);
                 $allowed = array_map('strval', $spec['options'] ?? []);
-                $bad = array_diff(array_map('strval', (array) $given), $allowed);
+                $bad = [];
+                foreach ((array) $given as $tok) {
+                    // 认复数/中文/口语（categories、分类、商品…），免得模型写了被拒后误以为“表不存在”
+                    if (!in_array(self::surfaceAlias((string) $tok), $allowed, true)) {
+                        $bad[] = (string) $tok;
+                    }
+                }
                 if ($bad) {
                     return $label . '「' . textClip(implode(',', $bad), 40) . '」不是可搜索的范围，可选：' . implode('/', $allowed);
                 }
@@ -3060,7 +3066,7 @@ TXT;
         return ['ok' => false, 'message' => '未实现的工具：' . $tool];
     }
 
-    /** 分类引用解析：接受数字 ID 或派生引用 CAT-0000xx（不含则 0）。 */
+    /** 分类引用解析：接受数字 ID、派生引用 CAT-0000xx，或分类名本身（name 唯一）。 */
     private static function categoryId($raw): int
     {
         $raw = trim((string) $raw);
@@ -3075,7 +3081,9 @@ TXT;
         if ($letters === 'CAT' && $digits > 0 && (new Category())->find($digits)) {
             return $digits;
         }
-        return 0;
+        // 模型也可能直接写分类名（如“把 服务 这个分类删掉”）——name 唯一，可安全反查
+        $byName = (new Category())->findBy('name', $raw);
+        return $byName ? (int) $byName['id'] : 0;
     }
 
     /** 商机阶段补丁 */
@@ -3193,6 +3201,32 @@ TXT;
 
     // ------------------------------------------------------------ read + delete runners
 
+    /**
+     * tables 参数宽容：模型常把范围写成复数/中文/口语（categories、分类、商品…）。
+     * 这里统一归一成 surface 键；归不了的原样返回，由 runSearch 显式提示而不是静默忽略。
+     */
+    private static function surfaceAlias(string $key): string
+    {
+        static $map = [
+            'customer' => 'customer', 'customers' => 'customer', 'client' => 'customer', 'clients' => 'customer',
+            '客户' => 'customer', '客户表' => 'customer',
+            'lead' => 'lead', 'leads' => 'lead', '线索' => 'lead', '线索表' => 'lead',
+            'deal' => 'deal', 'deals' => 'deal', '商机' => 'deal', '商机表' => 'deal', 'opportunity' => 'deal',
+            'order' => 'order', 'orders' => 'order', '订单' => 'order', '订单表' => 'order',
+            'product' => 'product', 'products' => 'product', '商品' => 'product', '商品库' => 'product',
+            '商品表' => 'product', 'catalog' => 'product',
+            'category' => 'category', 'categories' => 'category', 'cat' => 'category', '分类' => 'category',
+            '类别' => 'category', '品类' => 'category', '商品分类' => 'category', '分类表' => 'category',
+            'follow_up' => 'follow_up', 'follow_ups' => 'follow_up', '跟进' => 'follow_up', '跟进记录' => 'follow_up',
+            'order_item' => 'order_item', 'order_items' => 'order_item', '明细' => 'order_item', '明细行' => 'order_item',
+            'activity' => 'activity', 'activities' => 'activity', '动态' => 'activity', '活动' => 'activity',
+            'ai_request' => 'ai_request', 'ai_requests' => 'ai_request', 'airecord' => 'ai_request',
+            'AI记录' => 'ai_request', 'ai记录' => 'ai_request', 'ai' => 'ai_request', 'history' => 'ai_request',
+        ];
+        $k = strtolower(str_replace([' ', '表'], '', (string) $key));
+        return $map[$k] ?? (string) $key;
+    }
+
     /** Escape a keyword for LIKE: quote %, _ and \ so a search term stays literal. */
     public static function likeValue(string $term): string
     {
@@ -3231,27 +3265,36 @@ TXT;
         $rows = [];
         $tables = [];
         $totals = [];
+        $skipped = [];
         foreach ($wanted as $key) {
             $key = trim((string) $key);
-            if (!isset($surfaces[$key])) {
+            $norm = self::surfaceAlias($key);
+            if (!isset($surfaces[$norm])) {
+                // 模型可能把 tables 写成 categories/分类/商品 等口语写法：能归一的归一，
+                // 归不了的要明说，否则静默忽略会让模型误以为“那张表是空的”。
+                $skipped[] = $key;
                 continue;
             }
-            $tables[] = $surfaces[$key]['label'];
-            $found = self::querySurface($surfaces[$key], $term, $limit, $userId, $filters, $wholeTable);
+            $tables[] = $surfaces[$norm]['label'];
+            $found = self::querySurface($surfaces[$norm], $term, $limit, $userId, $filters, $wholeTable);
             foreach ($found as $row) {
                 $rows[] = $row;
             }
             // 精确总数：「现在有多少客户」要能一句答对，而不是「我看到 50 条」
-            $totals[] = ['label' => $surfaces[$key]['label'],
-                         'total' => self::countSurface($surfaces[$key], $term, $filters, $wholeTable)];
+            $totals[] = ['label' => $surfaces[$norm]['label'],
+                         'total' => self::countSurface($surfaces[$norm], $term, $filters, $wholeTable)];
         }
         $what = $term !== '' ? '「' . textClip($term, 40) . '」' : '';
         foreach ($filters as $name => $value) {
             $what .= ' ' . $name . '=' . textClip($value, 30);
         }
         if (!$rows) {
-            return ['ok' => true, 'message' => '没有找到匹配' . trim($what) . ' 的记录'
-                    . ($tables ? '（查了 ' . implode('、', $tables) . '）' : ''), 'rows' => []];
+            $tail = $tables ? '（查了 ' . implode('、', $tables) . '）' : '';
+            if ($skipped) {
+                $tail .= '；无法识别的范围：' . implode('、', array_unique($skipped))
+                    . '。可用 tables 取值：lead / customer / deal / order / product / category / follow_up / order_item / activity / ai_request';
+            }
+            return ['ok' => true, 'message' => '没有找到匹配' . trim($what) . ' 的记录' . $tail, 'rows' => []];
         }
         $bits = [];
         $grand = 0;

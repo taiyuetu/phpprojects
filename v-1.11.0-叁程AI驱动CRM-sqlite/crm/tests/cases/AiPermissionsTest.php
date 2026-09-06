@@ -577,6 +577,23 @@ function test_ai_cruds_product_categories(): void
     $ref = isset($searchRows[0]['code']) ? (string) $searchRows[0]['code'] : '';
     assertEquals('CAT-' . sprintf('%06d', $id), $ref, '分类搜索结果给稳定引用 CAT-0000xx');
 
+    // 模型把 tables 写成复数/中文也能命中（不静默忽略 → 不再误判库空）
+    foreach (['categories', '分类', '商品分类'] as $alias) {
+        $aliasRun = Ai::execute(Ai::validatePlan(
+            [['tool' => 'search_records', 'args' => ['tables' => $alias, 'q' => '轴承组']]],
+            $u
+        )['actions'], $u);
+        assertContains('共 1 条', (string) ($aliasRun['results'][0]['message'] ?? ''), "tables=「{$alias}」能命中分类");
+    }
+    // 完全无法识别的范围要在校验层就拦下并给可选值，而不是假装“表为空”
+    $badPlan = Ai::validatePlan(
+        [['tool' => 'search_records', 'args' => ['tables' => '分类大表', 'q' => '轴承组']]],
+        $u
+    );
+    $badMsg = implode(' ', (array) ($badPlan['errors'] ?? []));
+    assertContains('不是可搜索的范围', $badMsg, '未知范围给出可选提示而不是空结果');
+    assertContains('category', $badMsg, '可选值提示里明确列出 category');
+
     // get_record 看详情（直接给派生引用也能解析）
     $g = Ai::execute(Ai::validatePlan(
         [['tool' => 'get_record', 'args' => ['type' => 'category', 'id' => $ref]]],
@@ -596,7 +613,7 @@ function test_ai_cruds_product_categories(): void
 
     $del = Ai::execute(Ai::validatePlan(
         [['tool' => 'delete_category',
-          'args' => ['category_id' => $ref, 'confirm' => true, 'reason' => '整理分类']]],
+          'args' => ['category_id' => '轴承组改名', 'confirm' => true, 'reason' => '整理分类']]],
         $u
     )['actions'], $u);
     assertTrue((bool) (new Category())->find($id) === false, '分类已删除');
