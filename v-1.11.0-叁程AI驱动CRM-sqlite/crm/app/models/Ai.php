@@ -854,6 +854,7 @@ class Ai extends Model
 5. 需要 ID 时，只能用 <found> 或数据快照里出现过的真实 ID。找不到就说找不到（在 reply 里写清楚），不要猜一个 ID。
 6. 删除（delete_*）：当前开关={$deleteOn}。只有用户明确点名要删的那条才能删；必须带 confirm:true 和一句话 reason（会显示给审批人）；一次最多 5 个删除动作；不确定就先 get_record 或用 update_* 代替。删除会先弹人工确认，不会自动执行。
 7. 缺真实编号时先只发查询：search_records 支持关键词 q，也支持条件 country / status / stage / owner / days / from / to（「印度的所有客户」＝tables:customer + country:India，q 留空）；确实没有可过滤条件时写 all:true 取整表。系统当场执行查询，结果在下一轮 <tool_results> 里，你再出真正的写/删计划。最多 {$rounds} 轮，别反复查。
+7b. 说「删除/列出/新建 分类、品类」一律先 search_records(tables:category)：分类是独立主数据，不是商品表的 category 过滤列。
 8. 按条件批量删除：先查全（必要时写 all:true 取整表），再对每一条发一个删除动作；一次最多删除 {$maxdeletes} 条，超出会被服务端拒绝——那时在 reply 里说明还剩多少没处理，让人再来一轮。
 9. 用户说「删掉某客户和他的线索/商机/订单」时，一个 delete_customer 就够：它本身会连带删除该客户名下的线索、商机、订单，不要重复发 delete_lead/delete_deal/delete_order。
 10. **绝不靠名字猜属性**：“印度的客户”只能来自 search_records(country:India) 的真实结果，不能自己判断谁“看起来像印度人”。用户点名编号时除外；≥2 个删除动作系统会强制你先查一轮。
@@ -1893,6 +1894,8 @@ TXT;
             '线索'   => ['delete_lead', 'lead_id'],
             '商机'   => ['delete_deal', 'deal_id'],
             '订单'   => ['delete_order', 'order_id'],
+            '商品'   => ['delete_product', 'product_id'],
+            '分类'   => ['delete_category', 'category_id'],
             'AI 记录' => ['delete_ai_request', 'action_id'],
         ];
         $asked = (array) ($last['asked'][0]['args'] ?? []);
@@ -1955,7 +1958,7 @@ TXT;
 
         // 上一轮查的是哪一类，这一轮就只删那一类：delete_customer 本身会连带其子记录
         $wantType = ['customer' => '客户', 'lead' => '线索', 'deal' => '商机', 'order' => '订单',
-                      'ai_request' => 'AI 记录'][$askedTable] ?? null;
+                      'category' => '分类', 'ai_request' => 'AI 记录'][$askedTable] ?? null;
         foreach (array_slice($rows, 0, self::MAX_DELETES + 5) as $row) {
             $type = (string) ($row['type'] ?? '');
             if ($wantType !== null && $wantType !== $type) {
@@ -2141,6 +2144,15 @@ TXT;
                     'actions' => [['tool' => 'create_category', 'args' => ['name' => $cname], 'reason' => '用户要求新增商品分类']],
                 ], JSON_UNESCAPED_UNICODE);
             }
+        }
+        // 删除分类也要先查分类表：别让后面的“删除…商品…”分支把“删除所有商品分类”误判成删商品。
+        if (preg_match('~(?:删除|删掉|去掉|清空)[^。;；]{0,40}?(?:商品分类|分类|品类|类别)~u', $instruction)) {
+            return json_encode([
+                'reply' => '先把商品分类列出来（分类是独立主数据，删除前先确认库内有哪些）。',
+                'actions' => [['tool' => 'search_records',
+                               'args' => ['tables' => 'category', 'limit' => '50', 'all' => true],
+                               'reason' => '删除分类前先查清分类表']],
+            ], JSON_UNESCAPED_UNICODE);
         }
 
         // “把商品 BRG-6206 的价格改成 3.2”：演示模型也不许凭空写 id，
