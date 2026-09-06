@@ -29,13 +29,14 @@
                     <th>电话</th>
                     <th>备注</th>
                     <th>状态</th>
+                    <th>转化时间</th>
                     <th>负责人</th>
                     <th class="text-end">操作</th>
                 </tr>
             </thead>
             <tbody>
             <?php if (!$customers): ?>
-                <tr><td colspan="8" class="text-center text-muted p-4">未找到客户。</td></tr>
+                <tr><td colspan="9" class="text-center text-muted p-4">未找到客户。</td></tr>
             <?php endif; ?>
             <?php foreach ($customers as $c): ?>
                 <tr>
@@ -46,6 +47,7 @@
                     <td><?= e($c['phone'] ?: '—') ?></td>
                     <td title="<?= e($c['notes'] ?? '') ?>" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?= e($c['notes'] ?: '—') ?></td>
                     <td><?= statusBadge($c['status']) ?></td>
+                    <td class="text-nowrap" title="转化时间"><?= !empty($c['conversion_time']) ? formatDate($c['conversion_time'], 'Y-m-d H:i') : '—' ?></td>
                     <td><?= e($c['owner_name'] ?? '—') ?></td>
                     <td class="text-end">
                         <a href="<?= url('/customers/' . $c['id']) ?>" class="btn btn-sm btn-outline-primary" title="查看">
