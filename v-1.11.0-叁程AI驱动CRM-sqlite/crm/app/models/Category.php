@@ -36,6 +36,20 @@ class Category extends Model
         return (bool) $row;
     }
 
+    /**
+     * sort_order 是真正的整数列，0 是合法值（默认排序）。
+     * 但通用清洗把 int 的 0 当成“不关联的外键”置成 NULL（为 deal_id 等设计），
+     * 这里把空值/0 统一归零，避免撞上 NOT NULL 约束。
+     */
+    public function sanitizeInput(array $input, array $ctx = []): array
+    {
+        [$data, $errors] = parent::sanitizeInput($input, $ctx);
+        if (array_key_exists('sort_order', $data) && $data['sort_order'] === null) {
+            $data['sort_order'] = 0;
+        }
+        return [$data, $errors];
+    }
+
     public static function statusOptions(): array
     {
         return ['active' => '启用', 'inactive' => '停用'];
