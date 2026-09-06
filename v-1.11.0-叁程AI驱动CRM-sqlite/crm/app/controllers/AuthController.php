@@ -1,0 +1,186 @@
+<?php
+
+/**
+ * Copyright (c) 2026 wayne · 叁程 CRM (Triphase CRM) — 保留所有权利 / All rights reserved.
+ */
+
+class AuthController extends Controller
+{
+    public function showLogin(): void
+    {
+        if (isLoggedIn()) {
+            $this->redirect('/');
+        }
+        $this->view('auth/login', ['csrf' => $this->csrfToken()], 'auth');
+    }
+
+    public function login(): void
+    {
+        $this->verifyCsrf();
+
+        // Check login throttling
+        $throttle = $_SESSION['login_throttle'] ?? ['attempts' => 0, 'locked_until' => 0];
+        if (!empty($throttle['locked_until']) && $throttle['locked_until'] > time()) {
+            $remaining = $throttle['locked_until'] - time();
+            $this->view('auth/login', [
+                'csrf'   => $this->csrfToken(),
+                'errors' => ["尝试登录失败次数过多，已被临时锁定，请 {$remaining} 秒后再试。"],
+                'old'    => ['email' => trim($_POST['email'] ?? '')],
+            ], 'auth');
+            return;
+        }
+
+        $email = trim($_POST['email'] ?? '');
+        $password = $_POST['password'] ?? '';
+        $remember = !empty($_POST['remember']); // 记住密码选项
+
+        $errors = [];
+        if ($email === '' || $password === '') {
+            $errors[] = '请输入邮箱和密码。';
+        }
+
+        if (!$errors) {
+            $userModel = $this->model('User');
+            $user = $userModel->findByEmail($email);
+
+            if ($user && $userModel->verifyPassword($password, $user['password'])) {
+                // Clear throttling upon successful login
+                unset($_SESSION['login_throttle']);
+
+                session_regenerate_id(true);
+                $_SESSION['user_id'] = $user['id'];
+                $_SESSION['user'] = [
+                    'id'    => $user['id'],
+                    'name'  => $user['name'],
+                    'email' => $user['email'],
+                    'role'  => $user['role'],
+                ];
+
+                // 记住密码：勾选就签发 30 天 token；没勾选则把浏览器里残留的旧 cookie 一并作废，
+                // 免得用户这回想“不记住”结果上回勾过的 cookie 还在自动登录。
+                $tokenModel = new RememberToken();
+                if ($remember) {
+                    $token = $tokenModel->createToken($user['id']);
+                    $tokenModel->setCookie($token);
+                } elseif (!empty($_COOKIE[RememberToken::COOKIE_NAME])) {
+                    $tokenModel->deleteToken($_COOKIE[RememberToken::COOKIE_NAME]);
+                    $tokenModel->deleteCookie();
+                }
+
+                $this->setFlash('success', '欢迎回来，' . $user['name'] . '！');
+                $this->redirect('/');
+            }
+
+            // Track failed attempts
+            $attempts = ($throttle['attempts'] ?? 0) + 1;
+            if ($attempts >= 5) {
+                $_SESSION['login_throttle'] = [
+                    'attempts'     => 0,
+                    'locked_until' => time() + 60, // lock for 60 seconds
+                ];
+                $errors[] = '连续登录失败 5 次，账号登录已被临时锁定 60 秒。';
+            } else {
+                $_SESSION['login_throttle'] = [
+                    'attempts'     => $attempts,
+                    'locked_until' => 0,
+                ];
+                $errors[] = '邮箱或密码不正确。（剩余重试次数：' . (5 - $attempts) . ' 次）';
+            }
+        }
+
+        $this->view('auth/login', [
+            'csrf'   => $this->csrfToken(),
+            'errors' => $errors,
+            'old'    => ['email' => $email, 'remember' => $remember],
+        ], 'auth');
+    }
+
+    public function showRegister(): void
+    {
+        if (isLoggedIn()) {
+            $this->redirect('/');
+        }
+        $closed = !ALLOW_REGISTRATION;
+        $this->view('auth/register', [
+            'csrf'   => $this->csrfToken(),
+            'old'    => [],
+            'errors' => $closed ? [self::registrationClosedMessage()] : [],
+            'closed' => $closed,
+        ], 'auth');
+    }
+
+    private static function registrationClosedMessage(): string
+    {
+        return '新账号注册已关闭：请联系管理员开通账号，或在部署环境变量里设置 ALLOW_REGISTRATION=1 后再开放。';
+    }
+
+    public function register(): void
+    {
+        $this->verifyCsrf();
+
+        if (!ALLOW_REGISTRATION) {
+            $this->setFlash('error', self::registrationClosedMessage());
+            $this->redirect('/login');
+            return;
+        }
+
+        $name = trim($_POST['name'] ?? '');
+        $email = trim($_POST['email'] ?? '');
+        $password = $_POST['password'] ?? '';
+        $confirm = $_POST['password_confirm'] ?? '';
+
+        $errors = [];
+        if ($name === '' || $email === '' || $password === '') {
+            $errors[] = '所有字段均为必填。';
+        }
+        if ($password !== $confirm) {
+            $errors[] = '两次输入的密码不一致。';
+        }
+        if (strlen($password) > 0 && strlen($password) < 6) {
+            $errors[] = '密码至少需要6个字符。';
+        }
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $errors[] = 'Please enter a valid email address.';
+        }
+
+        $userModel = $this->model('User');
+
+        if (!$errors && $userModel->findByEmail($email)) {
+            $errors[] = '该邮箱已被注册。';
+        }
+
+        if ($errors) {
+            $this->view('auth/register', [
+                'csrf'   => $this->csrfToken(),
+                'errors' => $errors,
+                'old'    => ['name' => $name, 'email' => $email],
+            ], 'auth');
+            return;
+        }
+
+        $userId = $userModel->register($name, $email, $password);
+
+        session_regenerate_id(true);
+        $_SESSION['user_id'] = $userId;
+        $_SESSION['user'] = ['id' => $userId, 'name' => $name, 'email' => $email, 'role' => 'sales'];
+        $this->setFlash('success', '注册成功，欢迎，' . $name . '！');
+        $this->redirect('/');
+    }
+
+    public function logout(): void
+    {
+        $this->verifyCsrf();
+
+        // 清除记住密码 token
+        if (!empty($_COOKIE[RememberToken::COOKIE_NAME])) {
+            $tokenModel = new RememberToken();
+            $tokenModel->deleteToken($_COOKIE[RememberToken::COOKIE_NAME]);
+            $tokenModel->deleteCookie();
+        }
+
+        $_SESSION = [];
+        session_destroy();
+        header('Location: ' . url('/login'));
+        exit;
+    }
+}
