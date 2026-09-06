@@ -161,6 +161,34 @@ function test_get_record_reports_fields_relations_and_writability(): void
     assertContains('找不到对应记录', (string) $missing['results'][0]['message']);
 }
 
+/**
+ * AI 批量核对线索/商机备注时传的是稳定编号（LEAD-000007）而不是数字 ID——
+ * 曾把编号先 (int) 成 0、在解析前就被判成“记录类型或 ID 不合法”。回归锁住：
+ * 编号可查、备注能读到；商机没有备注字段则明说说明在哪，而不是假装有。
+ */
+function test_get_record_resolves_stable_codes_and_talks_about_notes(): void
+{
+    $u = permAdmin();
+    $a = permAccount($u);
+
+    (new Lead())->update($a['leadId'], ['notes' => '客户要求 8 月前出货，含税不含运']);
+    $run = Ai::execute(Ai::validatePlan(
+        [['tool' => 'get_record', 'args' => ['type' => 'lead', 'id' => 'LEAD-' . sprintf('%06d', $a['leadId'])]]],
+        $u
+    )['actions'], $u);
+    $msg = (string) ($run['results'][0]['message'] ?? '');
+    assertContains('线索 LEAD-', $msg, '用编号 get_record 线索成功');
+    assertContains('含税不含运', $msg, '线索备注能读到');
+
+    $run2 = Ai::execute(Ai::validatePlan(
+        [['tool' => 'get_record', 'args' => ['type' => 'deal', 'id' => 'DEAL-' . sprintf('%06d', $a['dealId'])]]],
+        $u
+    )['actions'], $u);
+    $msg2 = (string) ($run2['results'][0]['message'] ?? '');
+    assertContains('商机 DEAL-', $msg2, '用编号 get_record 商机成功');
+    assertContains('没有独立备注字段', $msg2, '商机备注去哪里的说明要交给模型');
+}
+
 function test_the_prompt_resolves_a_named_record_to_a_real_id(): void
 {
     $u = permAdmin();

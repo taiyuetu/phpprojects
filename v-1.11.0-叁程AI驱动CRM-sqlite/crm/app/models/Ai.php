@@ -3355,31 +3355,41 @@ TXT;
     private static function runDetail(array $args, int $userId): array
     {
         $type = (string) ($args['type'] ?? '');
-        $id   = (int) ($args['id'] ?? 0);
         $map  = [
             'lead'       => ['Lead', 'leads', '线索', 'owner_id'],
             'customer'   => ['Customer', 'customers', '客户', 'owner_id'],
             'deal'       => ['Deal', 'deals', '商机', 'owner_id'],
             'order'      => ['Order', 'orders', '订单', 'owner_id'],
+            'product'    => ['Product', 'products', '商品', 'owner_id'],
             'follow_up'  => ['FollowUp', 'follow_ups', '跟进记录', 'user_id'],
             'ai_request' => ['Ai', 'ai_actions', 'AI 记录', 'user_id'],
         ];
-        if (!isset($map[$type]) || $id <= 0) {
-            return ['ok' => false, 'message' => '记录类型或 ID 不合法'];
+        if (!isset($map[$type])) {
+            return ['ok' => false, 'message' => '记录类型不支持：' . ($type === '' ? '(空)' : $type)
+                . '。可用类型：lead / customer / deal / order / product / follow_up / ai_request'];
         }
+        $raw = trim((string) ($args['id'] ?? ''));
+        if ($raw === '') {
+            return ['ok' => false, 'message' => '缺少记录 id：请带上编号（如 LEAD-000007）或数字 ID。'];
+        }
+
         [$model, , $label, $ownerCol] = $map[$type];
         $instance = new $model();
-        if ($id <= 0 || !is_numeric($args['id'] ?? '')) {
-            // 允许直接写 CUS-000007 这类编号；订单纯文本则当 order_number 看
-            $id = (int) ($instance->idFromReference((string) $args['id']) ?? 0);
+
+        // id 三种写法都能解析：纯数字 ID、稳定编号（CUS-000007 / DEAL-000003）、
+        // 订单号（order 类型专有）。先别把编号 (int) 成 0，否则 code 永远查不到。
+        if (ctype_digit($raw)) {
+            $id = (int) $raw;
+        } else {
+            $id = (int) ($instance->idFromReference($raw) ?? 0);
             if ($id === 0 && $type === 'order') {
-                $byNumber = $instance->findBy('order_number', trim((string) ($args['id'] ?? '')));
+                $byNumber = $instance->findBy('order_number', $raw);
                 $id = $byNumber ? (int) $byNumber['id'] : 0;
             }
         }
-        $row = $id ? $instance->find($id) : null;
+        $row = $id > 0 ? $instance->find($id) : null;
         if (!$row) {
-            return ['ok' => false, 'message' => "{$label}「" . textClip((string) ($args['id'] ?? ''), 30) . '」找不到对应记录'];
+            return ['ok' => false, 'message' => "{$label}「" . textClip($raw, 30) . '」找不到对应记录'];
         }
         $id = (int) $row['id'];
         $code = $instance->codeOf($row);
@@ -3422,6 +3432,10 @@ TXT;
             if ($took > 0) {
                 $lines[] = '耗时：' . number_format($took / 1000, 1) . ' 秒';
             }
+        }
+        if ($type === 'deal') {
+            // deals 表没有备注列：与其让模型对着空字段编，不如明说说明在哪。
+            $lines[] = '备注：商机没有独立备注字段；洽谈说明在跟进记录里，单据/交付说明在关联订单的备注里。';
         }
         $lines[] = self::relationSummary($type, $id);
 
