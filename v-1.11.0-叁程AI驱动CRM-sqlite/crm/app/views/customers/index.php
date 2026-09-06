@@ -47,7 +47,7 @@
                     <td><?= e($c['phone'] ?: '—') ?></td>
                     <td title="<?= e($c['notes'] ?? '') ?>" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?= e($c['notes'] ?: '—') ?></td>
                     <td><?= statusBadge($c['status']) ?></td>
-                    <td class="text-nowrap" title="转化时间"><?= !empty($c['conversion_time']) ? formatDate($c['conversion_time'], 'Y-m-d H:i') : '—' ?></td>
+                    <td class="text-nowrap" title="转化时间"><?= !empty($c['conversion_time']) ? formatDate($c['conversion_time'], 'Y-m-d') : '—' ?></td>
                     <td><?= e($c['owner_name'] ?? '—') ?></td>
                     <td class="text-end">
                         <a href="<?= url('/customers/' . $c['id']) ?>" class="btn btn-sm btn-outline-primary" title="查看">

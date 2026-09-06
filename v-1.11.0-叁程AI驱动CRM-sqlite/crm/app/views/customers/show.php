@@ -56,7 +56,7 @@ $relatedId = (int) $customer['id'];
             <p class="mb-1"><?= statusBadge($customer['status']) ?></p>
             <p class="mb-1"><i class="bi bi-clock-history me-2"></i>
                 <?php if (!empty($customer['conversion_time'])): ?>
-                    转化时间：<?= formatDate($customer['conversion_time'], 'Y-m-d H:i') ?>
+                    转化时间：<?= formatDate($customer['conversion_time'], 'Y-m-d') ?>
                 <?php else: ?>
                     创建时间：<?= formatDate($customer['created_at'], 'Y-m-d H:i') ?>
                 <?php endif; ?>
