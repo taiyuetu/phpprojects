@@ -219,6 +219,13 @@ $tab = $tab ?? 'profile';
                 当前状态：<?= !empty($cfg['enabled']) ? '<strong>已启用</strong>' : '<strong>未启用</strong>' ?>
                 · <?= e($cfg['label']) ?>
                 · 模型 <?= e($cfg['model'] ?: '默认') ?>
+                · 接口 <code><?= e($cfg['base_url'] !== '' ? $cfg['base_url'] : '（未填，且该服务商无预设地址）') ?></code>
+                <?php $preset = (string) ($providers[$current]['base'] ?? ''); ?>
+                <?php if ($preset !== '' && ($settings['ai_base_url'] ?? '') !== ''
+                          && trim((string) $settings['ai_base_url']) !== $preset): ?>
+                    <span class="text-danger">（= 你在“接口地址”里手填的值，不是服务商预设的 <?= e($preset) ?>；
+                        清空那一栏就回到预设）</span>
+                <?php endif; ?>
                 · <?= !empty($cfg['auto_apply']) ? '自动执行' : '预览确认' ?>
                 · Key：<?= $cfg['key_from_env'] ? '由 .env 的 AI_API_KEY 提供（优先于下方填写值）'
                     : ($keyState['set'] ? '已保存 ' . e($keyState['masked']) : '未设置') ?>
@@ -253,7 +260,10 @@ $tab = $tab ?? 'profile';
                                     </div>
                                 <?php endif; ?>
                             <?php else: ?>
-                                <input type="text" name="<?= e($key) ?>" class="form-control" list="ai-models"
+                                <?php /* datalist 只给“模型”框：挂在每个文本框上时，
+                                       “接口地址”会从下拉里选出 mimo-v2.5 这种模型名并真的存进去 */ ?>
+                                <input type="text" name="<?= e($key) ?>" class="form-control"
+                                       <?= $key === 'ai_model' ? 'list="ai-models"' : '' ?>
                                        maxlength="<?= (int) ($def['max'] ?? 255) ?>"
                                        value="<?= e($value) ?>" placeholder="<?= e($def['placeholder'] ?? '') ?>">
                             <?php endif; ?>
@@ -263,6 +273,18 @@ $tab = $tab ?? 'profile';
                             <?php endif; ?>
                             <?php if ($key === 'ai_model' && $models): ?>
                                 <div class="form-text">该服务商常用模型：<?= e(implode(', ', $models)) ?></div>
+                            <?php endif; ?>
+                            <?php if ($key === 'ai_provider' && !empty($providers[$current]['note'])): ?>
+                                <div class="form-text"><?= e($providers[$current]['note']) ?></div>
+                            <?php endif; ?>
+                            <?php if ($key === 'ai_base_url' && ($providers[$current]['base'] ?? '') !== ''): ?>
+                                <div class="form-text">留空 = 用当前服务商的官方地址：
+                                    <code><?= e($providers[$current]['base']) ?></code>（填了则以你填的为准）。</div>
+                            <?php endif; ?>
+                            <?php if ($key === 'ai_provider' && !empty($providers[$current]['max_tokens_key'])
+                                       && $providers[$current]['max_tokens_key'] !== 'max_tokens'): ?>
+                                <div class="form-text">该接口按 <code><?= e($providers[$current]['max_tokens_key']) ?></code>
+                                    限制输出长度（由系统自动处理，“最大回复长度”照常填）。</div>
                             <?php endif; ?>
                         </div>
                     <?php endforeach; ?>
@@ -300,9 +322,18 @@ $tab = $tab ?? 'profile';
                     <form method="POST" action="<?= url('/settings/app') ?>">
                         <input type="hidden" name="csrf_token" value="<?= e($csrf) ?>">
                         <input type="hidden" name="ai_provider" value="<?= e($pk) ?>">
-                        <button type="submit" class="btn btn-sm btn-outline-secondary"><?= e($p['label']) ?></button>
+                        <?php /* 换服务商时一并清掉上一家残留的模型名与接口地址：
+                               config() 是“存了值就优先于服务商默认”，带着 deepseek-v4-flash
+                               去请 MiMo 只会收到 400。留空 = 用新服务商的默认值。 */ ?>
+                        <input type="hidden" name="ai_model" value="">
+                        <input type="hidden" name="ai_base_url" value="">
+                        <button type="submit" class="btn btn-sm btn-outline-secondary" <?= $pk === $current ? 'disabled' : '' ?>><?= e($p['label']) ?></button>
                     </form>
                 <?php endforeach; ?>
+            </div>
+            <div class="form-text mt-1">
+                点上面的服务商名字会直接切换，并同时把“模型”与“接口地址”清空（改用该服务商默认值）；
+                API Key <strong>不会被清除</strong>，请记得换成分配给这家的那一把。
             </div>
 
             <div class="alert alert-warning mt-4 small mb-0">

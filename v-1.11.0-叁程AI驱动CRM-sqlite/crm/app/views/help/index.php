@@ -659,6 +659,9 @@
                     而 PHP 侧写的 <code>lost_at</code>、<code>conversion_time</code>、<code>archived_at</code>、<code>stage_*_at</code>、
                     <code>users.updated_at</code> 用的是 <code>Asia/Shanghai</code>（<code>app/bootstrap.php</code> 里设的），两者差 8 小时。
                     页面按字面量显示，不做时区换算，所以看起来“早了 8 小时”。要统一建议全存 UTC 并在显示层换算（属于行为变更，需要单独定）。
+                    PHP 侧这一侧已经收口：写库的时间统一走 <code>appNow()</code> / <code>appDateTime()</code>（显式
+                    <code>Asia/Shanghai</code>，不靠默认时区凑巧），入库存一种写法（<code>Y-m-d H:i:s</code>），
+                    表单回填用 <code>appDateTimeLocal()</code> 转成控件认得的 <code>2026-09-07T14:30</code>。
                 </div>
             </div>
         </div>
@@ -801,11 +804,15 @@
                     历史原因说实话不体面：上一版我给每个工具手写参数表，<code>update_lead</code> 漏了
                     <code>source_country</code>，于是它回你“线索没有来源国家字段”——字段一直在，是我的清单漏了。
                     现在这条由 <code>AiFieldsTest</code> 钉住：<em>每张表的每一列要么可写、要么被明确排除，缺一个测试就失败</em>。<br>
-                    三点用法：
+                    四点用法：
                     <ol class="mb-2">
                         <li><strong>只说你要改的那几项</strong>，其余字段一个都不动；回执会用中文名告诉你改了哪些（“已更新：来源国家”）。</li>
                         <li><strong>想清空就明说</strong>（“把备注清空”），可空列会被真的写成空；标题、名称这类必填列会拒绝清空而不是写坏数据。</li>
                         <li><strong>负责人可以写姓名</strong>（“这条线索转给沈万明”）：管理员能指派任何人，普通账号只能指给自己。</li>
+                        <li><strong>时间按上海时间算</strong>：线索时间 / 转化时间这类到分的字段现在是有类型的参数（不是自由文本），
+                            你说“昨天下午3点半来询价的”，AI 会换算成上海时间的 <code>2026-09-06 15:30:00</code> 写进去；
+                            带时区的写法（<code>…Z</code>）也会换算到 +08:00。新建线索时你没说时间，
+                            系统就按上海时间落当前时刻——<strong>这一栏不会再留空</strong>。</li>
                     </ol>
                     写不了的只有这几类（<code>Ai::PROTECTED_COLUMNS</code>，由系统维护）：编号 <code>public_code</code>
                     与单号 <code>order_number</code>（改了你去哪儿复制的引用就会指向别的记录）、
@@ -954,7 +961,8 @@
                     模型调用是同步等待的，慢的常见来源按本机实测见效速度排序：<br>
                     ⓪ <strong>快速模式</strong>（<code>ai_fast_mode</code>，默认开）——思考型模型会先写一大段推理，实测同一条“新建线索”指令：关 = 7.8 秒且回 0 个动作，开 = 1.3 秒且给出正确的 <code>create_lead</code>；接口不支持该参数时会自动退回默认方式。<br>
                     ① <strong>最大回复长度</strong>（<code>ai_max_tokens</code>，默认 800）——输出越长等得越久，选“400 tokens”通常立刻快一半；<br>
-                    ② <strong>模型档位</strong>——换 flash 档（<code>deepseek-v4-flash</code> / <code>qwen3.8-flash</code> / <code>gpt-4o-mini</code>），推理型/思考型模型做一次计划可能要几十秒；<br>
+                    ② <strong>模型档位</strong>——换 flash 档（<code>deepseek-v4-flash</code> / <code>qwen3.8-flash</code> / <code>gpt-4o-mini</code>），推理型/思考型模型做一次计划可能要几十秒；
+                    小米 MiMo（<code>mimo-v2.5</code> / <code>mimo-v2.5-pro</code>）没有 flash 档，它靠<strong>⓪ 快速模式</strong>关思考（默认就关着，官方文档也说明思考模式下 <code>temperature</code> / <code>top_p</code> 会被服务端强制改写）；<br>
                     ③ <strong>响应超时</strong>（<code>ai_timeout</code>，默认 45 秒）。<br>
                     现在这三项都在 <strong>设置 → AI 助手</strong> 里可改，<code>/ai</code> 页面顶部会显示本次的“超时 Xs / ≤N tokens”预算。
                     超时会给出可读提示（“45 秒内没有收到 AI 响应…调大响应超时/换更快模型”），

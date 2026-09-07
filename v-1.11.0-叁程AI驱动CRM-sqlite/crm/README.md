@@ -144,13 +144,18 @@ DeepSeek, and it falls back automatically when an endpoint rejects the parameter
 `max_execution_time` is raised around it so a slow model returns a readable hint instead of a Fatal error).
 To point it at a real model, open 设置 → AI 助手 (admins), pick a provider, set the model and key and hit
 “测试连接”. Environment values always win over the stored settings, which keeps secrets out of the database:
+Provider dialects live in the `AiClient::providers()` array, not in `if ($provider === …)` branches: 小米 MiMo
+(`mimo`) needs `max_completion_tokens` instead of `max_tokens`, an extra `api-key:` header, `thinking: disabled`
+for 快速模式 and gets `response_format: json_object`; an endpoint that rejects any of those optional params is
+retried once without them. Adding a provider = adding one array entry (+ its preset models).
 
 ```bash
 # .env  (see .env.example)
 AI_ENABLED=1
-AI_PROVIDER=openai            # mock | ollama | openai | deepseek | moonshot | dashscope | zhipu | siliconflow | custom
-AI_MODEL=deepseek-v4-flash   # or deepseek-v4-pro / qwen3.8-flash / qwen3.8-max / gpt-4o-mini
-AI_BASE_URL=https://api.openai.com/v1
+AI_PROVIDER=openai            # mock | ollama | openai | deepseek | moonshot | dashscope | zhipu | mimo | siliconflow | custom
+AI_MODEL=deepseek-v4-flash   # or deepseek-v4-pro / qwen3.8-flash / qwen3.8-max / gpt-4o-mini / mimo-v2.5 / mimo-v2.5-pro
+AI_BASE_URL=https://api.openai.com/v1   # 小米 MiMo 留空即可（https://api.xiaomimimo.com/v1）；
+                                        # Token Plan 那套要改成 https://token-plan-cn.xiaomimimo.com/v1
 AI_API_KEY=***            # never echoed back to the browser, never written to logs
 AI_MODE=preview               # preview = 人确认后写库 (default) | auto
 ```

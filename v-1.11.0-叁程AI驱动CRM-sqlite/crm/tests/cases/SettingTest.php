@@ -288,7 +288,52 @@ function test_settings_page_renders_with_the_users_and_ownership_data(): void
     assertContains('应用信息', $html, 'admin sees the app-info tab');
     assertContains('恢复默认', $html, 'admin can reset the settings');
 
+    // --- AI 选项卡：服务商预设与“切换服务商”那几个按钮
+    //     （换服务商时必须连带清空模型与接口地址，否则会把上一家的 model id 带过去收到 400）
+    $GLOBALS['render_tab'] = 'ai';
+    (new Setting())->setMany(['ai_provider' => 'mimo'], $adminId);
+    $html = $render($adminId);
+    assertContains('小米 MiMo', $html, 'MiMo 出现在服务商列表里（预设同源，不手写）');
+    assertContains('api.xiaomimimo.com', $html, '页面上看得到它的端点');
+    assertContains('Token Plan', $html, '按量/套餐两套地址的差异要写在选择处');
+    // datalist 只许挂在“模型”框上：挂在每个文本框上时，“接口地址”能从下拉里
+    // 选中一个模型名并真的存进去（本次报障的根源），而错误只在“测试连接”时报
+    assertEquals(1, substr_count($html, 'list="ai-models"'), '只有“模型”框带候选模型下拉');
+    assertTrue(strpos($html, 'name="ai_base_url" class="form-control" list=') === false,
+        '“接口地址”不得吃模型的 datalist');
+    assertContains('api.xiaomimimo.com/v1', $html, '状态行要显示真正生效的接口地址');
+    $switches = (int) preg_match_all('~<input type="hidden" name="ai_provider"~', $html);
+    $clearsModel = (int) preg_match_all('~<input type="hidden" name="ai_model" value="">~', $html);
+    $clearsBase = (int) preg_match_all('~<input type="hidden" name="ai_base_url" value="">~', $html);
+    assertTrue($switches >= 2, '每个有端点的服务商都给一个一键切换按钮（实测 ' . $switches . '）');
+    assertEquals($switches, $clearsModel, '每个切换表单都清空模型');
+    assertEquals($switches, $clearsBase, '每个切换表单都清空接口地址');
+    unset($GLOBALS['render_tab']);
+    (new Setting())->setMany(['ai_provider' => 'mock'], $adminId);
+
     unset($_SESSION['user_id'], $_SESSION['user'], $GLOBALS['render_tab']);
+}
+
+/** 接口地址存错了值时，症状只是一句“连接失败”——保存时就得拦下 */
+function test_a_bad_endpoint_is_refused_when_saving_not_when_testing(): void
+{
+    $ok = Setting::sanitize(['ai_base_url' => '']);
+    assertEquals([], $ok['errors'], '留空是合法值（用服务商预设地址）');
+
+    $good = Setting::sanitize(['ai_base_url' => 'https://token-plan-cn.xiaomimimo.com/v1']);
+    assertEquals([], $good['errors'], '完整 https 地址通过');
+    assertEquals('https://token-plan-cn.xiaomimimo.com/v1', $good['values']['ai_base_url'], '原值保留');
+
+    // 真实踩到的情形：在“接口地址”里选中了弹出来的模型名
+    $bad = Setting::sanitize(['ai_base_url' => 'mimo-v2.5']);
+    assertTrue($bad['errors'] !== [], '不是完整地址就要报错，不能存到库里');
+    assertContains('接口地址', $bad['errors'][0], '错误点名是哪个框');
+    assertContains('mimo-v2.5', $bad['errors'][0], '并且把收到的值写出来');
+    assertContains('留空', $bad['errors'][0], '还要告诉用户留空会发生什么');
+
+    // http 只有本机地址合法（与请求层同一口径，不要让人存一个看似存了实际发不出去的值）
+    $plain = Setting::sanitize(['ai_base_url' => 'http://api.example.com/v1']);
+    assertEquals([], $plain['errors'], '形状合法：强制 https 的规则在 AiClient 里把关并会说清原因');
 }
 
 runCase();

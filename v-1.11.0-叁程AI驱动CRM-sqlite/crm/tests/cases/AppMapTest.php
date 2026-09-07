@@ -131,8 +131,14 @@ function test_appmap_documents_the_ai_surface(): void
 
     foreach (map_()['ai_models'] as $p) {
         assertTrue($p['default'] !== '' || $p['key'] === 'custom', "{$p['key']} has a default model");
-        if (in_array($p['key'], ['openai', 'deepseek', 'dashscope', 'moonshot', 'zhipu', 'siliconflow', 'ollama'], true)) {
+        if (in_array($p['key'], ['openai', 'deepseek', 'dashscope', 'moonshot', 'zhipu', 'siliconflow', 'ollama', 'mimo'], true)) {
             assertTrue(preg_match('~^https?://~', $p['base']) === 1, "{$p['key']} declares an endpoint");
+        }
+        // 服务商之间的参数名差异也得进文档（否则设置页与文档会变成两套真相）
+        if ($p['key'] === 'mimo') {
+            assertContains('max_completion_tokens', $p['max_key'], 'MiMo 的输出长度参数名进了文档');
+            assertTrue($p['json_mode'], 'MiMo 的 JSON 模式在文档里可见');
+            assertContains('Token Plan', $p['note'], '按量/套餐两套地址的说明在文档里');
         }
     }
     $ids = array_column(map_()['ai_models'], 'key');

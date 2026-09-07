@@ -24,7 +24,7 @@ class AiClient
     /** Keep this much room before PHP's own max_execution_time fires. */
     public const HEADROOM = 10;
 
-    /** Test hook: callable(string $url, ?array $payload, string $key, float $timeout): array */
+    /** Test hook: callable(string $url, ?array $payload, string $key, float $timeout, string $keyHeader): array */
     public static $transport = null;
 
     /**
@@ -177,6 +177,32 @@ class AiClient
                 'key_required'  => true,
                 'models'        => ['glm-4-flash', 'glm-4-plus'],
             ],
+            'mimo' => [
+                'label'         => '小米 MiMo（Xiaomi，OpenAI 兼容）',
+                'base'          => 'https://api.xiaomimimo.com/v1',
+                // 官方模型列表（2026-07-15）：v2.5 与 v2.5-pro 都是 1M 上下文 / 128K 输出，
+                // 都支持函数调用与结构化输出；v2 系列（mimo-v2-pro / v2-flash / v2-omni / v2-tts）
+                // 已于 2026-06-30 下线、名字失效，所以一个也不列：
+                // 预设里放一个不存在的 model id，管理员一保存就是 400。
+                'default_model' => 'mimo-v2.5',
+                'key_required'  => true,
+                'models'        => ['mimo-v2.5', 'mimo-v2.5-pro'],
+                // 深度思考默认开着：一句“新建线索”也要先想几十秒，而且思考模式下
+                // temperature / top_p 会被服务端强制改写。与 deepseek 同一处置：快速模式里关掉。
+                'fast_params'   => ['thinking' => ['type' => 'disabled']],
+                // 官方文档里输出长度参数叫 max_completion_tokens（不出现 max_tokens），名字发错轻则无效重则 400
+                'max_tokens_key' => 'max_completion_tokens',
+                // 本功能只接受一个 JSON 对象（{reply,actions}）：json_object 模式由服务端保证语法合法，
+                // 避开“带围栏/带解说的回复解析失败”这一整类报错
+                'json_mode'     => true,
+                // 官方 curl 示例用 api-key 头，OpenAI SDK 走 Authorization: Bearer；两个都发，
+                // 不认的那个会被忽略，不会出现“Key 明明填对了却 401”
+                'key_header'    => 'api-key',
+                // Token Plan（订阅套餐）与按量付费不同域名、不同前缀的 Key（tp- 开头）
+                'note'          => '按量付费的 Key 以 sk 开头；若你买的是 Token Plan，把上方“接口地址”改成'
+                                   . ' https://token-plan-cn.xiaomimimo.com/v1，并用控制台里那把 tp 开头的 Key。'
+                                   . '控制台：platform.xiaomimimo.com（建 Key / 看余额）。',
+            ],
             'siliconflow' => [
                 'label'         => '硅基流动 SiliconFlow',
                 'base'          => 'https://api.siliconflow.cn/v1',
@@ -233,6 +259,11 @@ class AiClient
             // “快速模式”：把思考型模型改成直接作答。关掉思考是本机实测最大的提速来源。
             'fast_mode'    => ($env('AI_FAST_MODE') ?? (string) Setting::get('ai_fast_mode', '1')) !== '0',
             'fast_params'  => is_array($provider['fast_params'] ?? null) ? $provider['fast_params'] : [],
+            // 服务商之间的参数名差异都在这三个预设字段里，不在代码里写死域名判断
+            'max_tokens_key' => (string) ($provider['max_tokens_key'] ?? 'max_tokens'),
+            'json_mode'    => (bool) ($provider['json_mode'] ?? false),
+            'key_header'   => (string) ($provider['key_header'] ?? ''),
+            'note'         => (string) ($provider['note'] ?? ''),
             'suggest_models' => $provider['models'] ?? [],
         ];
     }
@@ -289,23 +320,33 @@ class AiClient
         // Bound the answer: an unbounded completion is the single biggest cause of
         // a 30-60 s wait, and a plan needs far fewer tokens than a chat reply.
         if ((int) ($cfg['max_tokens'] ?? 0) > 0) {
-            $payload['max_tokens'] = (int) $cfg['max_tokens'];
+            // 名字由服务商定：MiMo 只认 max_completion_tokens（官方示例仍用这个名字），
+            // 传统的 OpenAI 兼容端点用 max_tokens。
+            $payload[(string) ($cfg['max_tokens_key'] ?? '') ?: 'max_tokens'] = (int) $cfg['max_tokens'];
         }
 
         $note = '';
         $fast = !empty($cfg['fast_mode']) && !empty($cfg['fast_params']) ? (array) $cfg['fast_params'] : [];
-        if ($fast) {
-            $payload = array_merge($payload, $fast);
+        // 可选参数 = 服务商专属的开关（关思考、JSON 模式）。它们不是协议必需项：
+        // 端点不认时就整组去掉重试一次，而不是把用户的请求直接失败掉。
+        $optional = $fast;
+        if (!empty($cfg['json_mode'])) {
+            $optional['response_format'] = ['type' => 'json_object'];
+        }
+        if ($optional) {
+            $payload = array_merge($payload, $optional);
         }
 
+        $keyHeader = (string) ($cfg['key_header'] ?? '');
         $timeout = self::allowTime((float) $cfg['timeout']);
-        $res = self::postJson($endpoint, $payload, (string) $cfg['api_key'], $timeout);
-        if (!$res['ok'] && $fast && self::rejectsParam((string) $res['error'], array_keys($fast))) {
+        $res = self::postJson($endpoint, $payload, (string) $cfg['api_key'], $timeout, $keyHeader);
+        if (!$res['ok'] && $optional && self::rejectsParam((string) $res['error'], array_keys($optional))) {
             // The endpoint does not know the parameter (a proxy, an older gateway).
             // Fall back once instead of failing the user's request.
-            $res = self::postJson($endpoint, array_diff_key($payload, array_flip(array_keys($fast))),
-                (string) $cfg['api_key'], $timeout);
-            $note = '（该接口不接受“快速模式”参数，已改用默认回复方式）';
+            $res = self::postJson($endpoint, array_diff_key($payload, array_flip(array_keys($optional))),
+                (string) $cfg['api_key'], $timeout, $keyHeader);
+            $note = '（该接口不接受 ' . implode(' / ', array_keys($optional))
+                . ' 参数，已改用默认回复方式）';
         }
         $ms  = (int) round((microtime(true) - $t0) * 1000);
 
@@ -357,12 +398,18 @@ class AiClient
     public static function listModels(?array $override = null): array
     {
         $cfg = $override ? array_merge(self::config(), $override) : self::config();
+        // 没有 Key 就不要把请求发出去：对方只能回 401，而在审计与错误里留下一个
+        // “接口自己报的错”，不如直接说“这里还差一把 Key”（与 chat() 同一口径）。
+        if ($cfg['needs_key'] && (string) $cfg['api_key'] === '') {
+            return ['ok' => false, 'error' => '缺少 API Key：请在 设置 → AI 助手 填写，或在 .env 里设置 AI_API_KEY。'];
+        }
         $url = self::chatUrl((string) $cfg['base_url']);
         if (!$url['ok']) {
             return ['ok' => false, 'error' => $url['error']];
         }
         $modelsUrl = preg_replace('~/chat/completions$~', '', $url['url']) . '/models';
-        $res = self::postJson($modelsUrl, null, (string) $cfg['api_key'], self::allowTime(15.0));
+        $res = self::postJson($modelsUrl, null, (string) $cfg['api_key'], self::allowTime(15.0),
+            (string) ($cfg['key_header'] ?? ''));
         if (!$res['ok']) {
             return ['ok' => false, 'error' => self::redact((string) $res['error'], $cfg)];
         }
@@ -387,11 +434,15 @@ class AiClient
         $bad = static fn(string $why): array => ['ok' => false, 'error' => $why];
 
         if (trim($base) === '') {
-            return $bad('缺少接口地址：请在 设置 → AI 助手 填写，或改用内置服务商。');
+            return $bad('缺少接口地址：该服务商没有预设地址，请在 设置 → AI 助手 的“接口地址”里填完整地址，或换有预设的服务商。');
         }
         $parts = parse_url(trim($base));
         if (empty($parts['scheme']) || empty($parts['host'])) {
-            return $bad('接口地址不完整：需要类似 https://api.example.com/v1 的完整地址。');
+            // 把当前存的那个值拼进错误里：不拼的话，用户看到“地址不完整”却不知道哪里不完整
+            //（实际情定：模型下拉的候选项落到了“接口地址”框里，存成了 mimo-v2.5）
+            return $bad('接口地址不完整：现在用的是「' . textClip(trim($base), 60) . '」，'
+                . '需要类似 https://api.example.com/v1 的完整地址（在 设置 → AI 助手 → 接口地址 改，'
+                . '或清空该框改用服务商预设）。');
         }
         $scheme = strtolower((string) $parts['scheme']);
         if (!in_array($scheme, ['http', 'https'], true)) {
@@ -419,10 +470,10 @@ class AiClient
      *
      * @return array{ok:bool,json:array,error:string,status:int,raw:string}
      */
-    private static function postJson(string $url, ?array $payload, string $key, float $timeout): array
+    private static function postJson(string $url, ?array $payload, string $key, float $timeout, string $keyHeader = ''): array
     {
         if (is_callable(self::$transport)) {   // tests (and any custom transport) skip the checks below
-            return call_user_func(self::$transport, $url, $payload, $key, $timeout)
+            return call_user_func(self::$transport, $url, $payload, $key, $timeout, $keyHeader)
                 + ['json' => [], 'error' => '', 'status' => 0, 'raw' => ''];
         }
 
@@ -434,6 +485,11 @@ class AiClient
         ];
         if ($key !== '') {
             $headers[] = 'Authorization: Bearer ' . $key;
+            // 有的服务商（小米 MiMo 的官方 curl 示例）用 api-key 头而不是 Bearer。
+            // 两个都发：多余的请求头会被服务端忽略，少一个则是“Key 正确却 401”。
+            if ($keyHeader !== '') {
+                $headers[] = $keyHeader . ': ' . $key;
+            }
         }
 
         $http = [

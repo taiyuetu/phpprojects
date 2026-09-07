@@ -11,6 +11,32 @@
 > 注：仓库目录更名 `v-1.111.0-叁程AI驱动CRM-sqlite` → `v-1.11.0-叁程AI驱动CRM-sqlite`（纯目录重命名，代码无变化）。
 
 ### Added
+- **AI 助手接入小米 MiMo**（`AiClient::providers()` 新增 `mimo`，设置 → AI 服务商 直接出现）：
+  端点 `https://api.xiaomimimo.com/v1`（OpenAI 兼容），模型只列在服的
+  `mimo-v2.5`（默认）/ `mimo-v2.5-pro`——`mimo-v2-pro` / `v2-flash` / `v2-omni` / `v2-tts`
+  已于 2026-06-30 下线、名字失效，预设里放一个不存在的 model id 就是给管理员埋 400。
+  Token Plan（订阅套餐）是另一个域名与另一把 Key，因此预设里带了 `note`，
+  设置页选中 MiMo 时会提示把接口地址改成 `https://token-plan-cn.xiaomimimo.com/v1`。
+  接 MiMo 时发现它虽然“OpenAI 兼容”，但方言有三处不一样，全部做成**服务商预设字段**
+  而不是在代码里 `if ($provider === 'mimo')`：
+  - `max_tokens_key` ⇒ 它只认 `max_completion_tokens`（官方文档从头到尾没出现过 `max_tokens`），
+    名字发错轻则限制失效、重则 400；“最大回复长度”这个设置项对客户不变，发哪个名字由服务商定；
+  - `key_header` ⇒ 官方 curl 示例用 `api-key:` 头、OpenAI SDK 走 `Authorization: Bearer`，
+    现在两个一起发（不认的请求头会被忽略），避免“Key 明明填对了却 401”；
+  - `json_mode` ⇒ 本功能的协议本来就是一个 JSON 对象（`{reply,actions}`），所以请求里带
+    `response_format: {"type":"json_object"}`，由服务端保证语法合法，扇掉“带围栏/带解说的回复解析失败”这一整类报错。
+  另外 `thinking: {type: disabled}` 归进现有“快速模式”（MiMo 默认开着深度思考，而且思考模式下
+  `temperature` / `top_p` 会被强制改写）。原先只针对快速模式参数的“端点不认 → 去掉重试一次”
+  兑底，现在扩大为**整组可选参数**（thinking + response_format），并在回执里点名是哪个参数被拒。
+  设置页、`/help` 技术参考的服务商表都从 `AiClient::providers()` 生成（新增“输出长度参数名”与
+  “JSON 模式”两行），不存在手写第二份清单。回归：`tests/cases/AiTest.php` 新增两条
+  （方言与请求体、不认参数时的回退与 JSON 模式独立性）、`test_provider_presets_name_current_model_ids`
+  补 MiMo 端点与下线模型不得入预设的断言；`AppMapTest` 钉住差异已进文档。
+- **AI 服务商一键切换不再带旧配置**（接 MiMo 时顺手堵的坑）：`config()` 是“存了值就优先于服务商默认”，
+  而模型与接口地址都是跟服务商走的，从 DeepSeek 切到 MiMo 而模型框里还留着 `deepseek-v4-flash`，
+  得到的只会是一个 400。现在那些切换按钮同时提交 `ai_model=''` 与 `ai_base_url=''`
+  （= 改用新服务商的默认值），按钮上标注了这一点；密钥仍然**不动**（它走“清除已保存的 API Key”那个勾选框）。
+  另外“接口地址”框下新增一行提示：留空时实际使用的就是当前服务商的官方地址（以前只能靠猜）。
 - **线索 / 商机单页**：客户早已有 `/customers/{id}` 查看页，这次补上 `GET /leads/{id}` 与
   `GET /deals/{id}`（路由注册在 `/deals/archived` 之后，字面量仍优先匹配）。线索/商机在列表里的
   标题（线索表格 / 商机看板卡片）变为链接，点击进入单页。
@@ -77,6 +103,43 @@
   再分别解析纯数字 ID / 稳定编号 / 订单号（order 专有）；同时补上工具声明里有、执行 map 漏掉的
   `product` 类型；`deals` 表没有独立备注列，`get_record(type:deal)` 会明确告知说明在跟进记录与
   关联订单备注里，不再让模型凭空编内容。
+- **AI 添加线索不写「线索时间」**：`create_lead` 只落模型给的那几个字段，`leads.lead_time` 一直是 NULL，
+  详情页这一栏永远空着（现库 23 条线索全空）。三处一起收口：
+  - `Ai::kindInfo('lead')` 的 `defaults` 增加 `lead_time` ⇒ 模型没给就按**上海时间**落当前时刻，
+    模型给了就尊重它换算的结果（素材里写明“昨天下午来的询盘”时写的是那个时刻）；
+  - `Ai::fieldsFor()` 不再把 `lead_time` / `conversion_time` 当成普通文本：注册表的 `datetime`
+    现在有对应参数类型（并给 `guessType()` 补上 `_time` 后缀兼平），参数说明与提示词规则 4
+    都写明 24 小时制、上海时间；认不出来的值由 `checkArg()` 直接拒绝（“无法识别为时间”），
+    而不是落一栏自由文本；
+  - 新增 `appNow()` / `appDateTime()` / `appDateTimeLocal()` / `appCnNumber()`（`app/core/helpers.php`）：
+    显式 `Asia/Shanghai`，不依赖 PHP 默认时区（bootstrap 虽然设了上海，但 CLI、定时任务不然）；
+    中文「昨天下午3点半」、控件的 `…T14:30`、带偏移的 ISO（`…Z` 会 +8 换算）一律归一为
+    `Y-m-d H:i:s`；`Ai::parseDate()` 的「今天」也改为按上海日历日算（并认 `2026年9月7号`）；
+  - 迁移 `015_backfill_lead_time.sql` 把历史线索的线索时间按 `created_at`(UTC) + 8 小时补齐
+    （只填 NULL/空串，重复执行安全）。
+  回归见 `tests/cases/LeadTimeTest.php`（7 条：自动落时、默认时区被改走仍是上海时间、
+  中文/ISO 换算、非法值被拒、字段引擎与提示词标型、表单往返、迁移回填）。
+  保留的差别：页面上「线索时间」仍是选填（留空即“不知道”，与清空同义），只有 AI 新建走自动补当前时刻。
+- **编辑页面会把「线索时间 / 转化时间」静默洗成空**：`lost_at`、`conversion_time` 这类 PHP 写的是
+  `Y-m-d H:i:s`，而 `<input type="datetime-local">` 只认 `2026-09-07T14:30`。库里是空格写法时控件回填
+  显示为空，用户只是改个电话号码再保存，这一栏就被清掉了。`Fields::sanitize()` 按 `datetime`
+  归一入库值（带 `:datetime` 的表单值不再直接透传），`Fields::block()` 与线索/客户表单用
+  `appDateTimeLocal()` 转回控件写法；线索详情页改为 `formatDate('Y-m-d H:i')` 显示（空值 `—`）。
+- **选了小米 MiMo 后“测试连接”报「接口地址不完整：需要类似 https://api.example.com/v1 的完整地址」**：
+  库里 `ai_base_url` 存的竟是 `mimo-v2.5` —— 模型候选项的 `list="ai-models"` datalist 当时挂在
+  设置页**每一个**文本框上，管理员在“接口地址”框里选中了下拉弹出来的模型名并真的存进了库；
+  而 `AiClient::config()` 是“存了值就优先于服务商默认”，于是 `chatUrl()` 拿到一个模型名当地址。
+  四处收口（错误本身也没错，错在它来得太晚、且不告诉你现在存的是什么）：
+  - datalist 只挂在“模型”框上（`app/views/settings/index.php`）；
+  - `ai_base_url` 声明 `url => true`，由 `Setting::sanitize()` 在**保存时**就校验（与请求层同一口径：
+    必须是带 host 的 http/https），错误消息里带上收到的值与“留空会怎样”；
+  - `chatUrl()` 的两条错误现在都带上现场信息：不完整时拼出当前用的值并点名去哪个框改，
+    为空时说清是该服务商没有预设地址（只有 `custom` 会这样）；
+  - 设置页状态行显示**真正生效的接口地址**，与服务商预设不一致时标红提醒。
+  另：`AiClient::listModels()` 在没有 Key 时不再发那个注定 401 的匿名请求，直接回“缺少 API Key”
+  （与 `chat()` 同口径），测试连接的反馈不再隔了一层。现库里的 `ai_base_url` 已清空。
+  回归：`SettingTest` 新增“坏地址在保存时就被拒”与页面只挂一个 datalist 的断言、
+  `AiTest` 端点用例多一行“错误里要看见当前的值”、并新增 `listModels` 缺 Key 不发请求的用例。
 
 ---
 

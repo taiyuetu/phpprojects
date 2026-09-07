@@ -143,8 +143,9 @@ class Setting extends Model
                 'type'        => 'text',
                 'default'     => '',
                 'max'         => 200,
+                'url'         => true,      // 保存时就校验（见 Setting::sanitize），不留到“测试连接”才发现
                 'placeholder' => 'https://…/v1（自建网关或兼容接口才需填写）',
-                'hint'        => '只允许 http/https；非本机地址强制 https。',
+                'hint'        => '只允许 http/https；非本机地址强制 https。留空就用服务商预设的地址（该预设见下方“当前服务商”提示）。',
             ],
             'ai_api_key' => [
                 'group'   => 'ai',
@@ -415,6 +416,20 @@ class Setting extends Model
             if (!empty($def['required']) && $value === '') {
                 $errors[] = $def['label'] . '不能为空。';
                 $value = (string) $def['default'];
+            }
+
+            // “接口地址”这种值一旦存错了，症状只是“连接失败”，而且报的还是另一层的提示
+            //（不告诉你现在存的到底是什么）。实测：模型列表的 datalist 当时挂在每个文本框上，
+            // 管理员在“接口地址”里选中了弹出来的 mimo-v2.5 —— 于是测试连接报“接口地址不完整”。
+            // 所以在保存时就拦下，而不是等到发请求。
+            if (!empty($def['url']) && $value !== '') {
+                $parts = parse_url($value);
+                $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+                if (($parts['host'] ?? '') === '' || !in_array($scheme, ['http', 'https'], true)) {
+                    $errors[] = $def['label'] . ' 需要完整的 http/https 地址（如 https://api.xiaomimimo.com/v1），'
+                        . '收到「' . textClip($value, 40) . '」；留空则用所选服务商的默认地址。';
+                    $value = '';
+                }
             }
 
             $values[$key] = $value;

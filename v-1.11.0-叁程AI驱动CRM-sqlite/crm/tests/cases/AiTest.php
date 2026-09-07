@@ -257,6 +257,7 @@ function test_provider_presets_name_current_model_ids(): void
     $expected = [
         'deepseek'  => 'https://api.deepseek.com/chat/completions',
         'dashscope' => 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+        'mimo'      => 'https://api.xiaomimimo.com/v1/chat/completions',
     ];
     foreach ($expected as $provider => $want) {
         $seen = null;
@@ -434,6 +435,112 @@ function test_a_gateway_that_rejects_the_parameter_falls_back_instead_of_failing
     aiResetSettings();
 }
 
+/**
+ * 小米 MiMo 是一个 OpenAI 兼容端点，但方言与别人不同：输出长度参数叫
+ * max_completion_tokens、官方 curl 示例用 api-key 头、深度思考默认开着、支持
+ * response_format: json_object（本功能的协议本来就是一个 JSON 对象）。
+ * 这些差异全放在 AiClient::providers() 的预设里，所以必须有测试钉住：
+ * 预设一改，请求体就错，而症状只是“AI 不回答”。
+ */
+function test_mimo_is_wired_with_its_own_dialect(): void
+{
+    $p = AiClient::providers();
+    assertEquals('https://api.xiaomimimo.com/v1', $p['mimo']['base'], '官方 OpenAI 兼容端点');
+    assertEquals(['mimo-v2.5', 'mimo-v2.5-pro'], $p['mimo']['models'], '只列还在服的模型');
+    assertEquals('mimo-v2.5', $p['mimo']['default_model'], '默认给更快更省的 v2.5');
+    assertTrue((bool) $p['mimo']['key_required'], '云端要 Key');
+
+    // v2 系列（2026-06-30 下线、名字失效）一个都不能出现在预设里：选了就是 400
+    $blob = json_encode($p, JSON_UNESCAPED_UNICODE);
+    foreach (['mimo-v2-pro', 'mimo-v2-flash', 'mimo-v2-omni', 'mimo-v2-tts'] as $dead) {
+        assertTrue(strpos($blob, '"' . $dead . '"') === false, '已下线模型不进预设：' . $dead);
+    }
+
+    aiUseFakeTransport(['ai_provider' => 'mimo', 'ai_model' => '', 'ai_max_tokens' => '700']);
+    $cfg = AiClient::config();
+    assertEquals('mimo-v2.5', $cfg['model'], '模型留空时用服务商默认值');
+    assertEquals('max_completion_tokens', $cfg['max_tokens_key'], '输出长度参数名来自预设');
+    assertEquals(true, $cfg['json_mode'], 'MiMo 走 JSON 模式');
+    assertEquals('api-key', $cfg['key_header'], '官方 curl 示例用的那个头');
+    assertEquals(['thinking' => ['type' => 'disabled']], $cfg['fast_params'], '快速模式关掉深度思考');
+
+    $seen = [];
+    $meta = [];
+    AiClient::$transport = static function (string $url, ?array $payload, string $key, float $timeout,
+                                           string $keyHeader) use (&$seen, &$meta) {
+        $seen  = (array) $payload;
+        $meta  = [$url, $keyHeader];
+        return ['ok' => true, 'json' => ['choices' => [['message' => ['content' => '{"reply":"ok","actions":[]}']]]],
+                'error' => '', 'status' => 200, 'raw' => ''];
+    };
+    $res = AiClient::chat([['role' => 'user', 'content' => '新建线索：测试']], $cfg);
+    assertTrue((bool) $res['ok'], '请求成功');
+    assertEquals('https://api.xiaomimimo.com/v1/chat/completions', $meta[0], '拼出的请求地址');
+    assertEquals('api-key', $meta[1], '除了 Bearer，再把服务商认的头名交出去');
+    assertEquals(700, (int) ($seen['max_completion_tokens'] ?? 0), '输出长度用 MiMo 认得的名字');
+    assertEquals(false, array_key_exists('max_tokens', $seen), '不再发它不认的 max_tokens');
+    assertEquals(['type' => 'disabled'], $seen['thinking'] ?? null, '思考关掉（否则一句建线索要等十几秒）');
+    assertEquals(['type' => 'json_object'], $seen['response_format'] ?? null, 'JSON 模式随请求发出');
+    aiResetSettings();
+}
+
+/** 网关不认这些可选参数时：去掉重试一次，而不是把用户的请求弄挂 */
+function test_a_mimo_gateway_that_rejects_the_optional_params_still_answers(): void
+{
+    aiUseFakeTransport(['ai_provider' => 'mimo']);
+    $calls = [];
+    AiClient::$transport = static function (string $url, ?array $payload, string $key, float $timeout) use (&$calls) {
+        $calls[] = (array) $payload;
+        if (count($calls) === 1) {
+            return ['ok' => false, 'json' => [], 'error' => "Unsupported parameter: 'response_format'",
+                    'status' => 400, 'raw' => ''];
+        }
+        return ['ok' => true, 'json' => ['choices' => [['message' =>
+            ['content' => '{"reply":"回退后仍可用","actions":[]}']]]], 'error' => '', 'status' => 200, 'raw' => ''];
+    };
+    $res = AiClient::chat([['role' => 'user', 'content' => 'hi']], AiClient::config());
+    assertTrue((bool) $res['ok'], '第二次请求成功，用户看不到失败');
+    assertEquals(2, count($calls), '只重试一次');
+    assertEquals(false, array_key_exists('response_format', $calls[1]), '重试时把可选参数整组去掉');
+    assertEquals(false, array_key_exists('thinking', $calls[1]), '思考开关也一起去掉');
+    assertContains('不接受', (string) ($res['notice'] ?? ''), '但仍然告知发生过回退');
+    assertContains('response_format', (string) ($res['notice'] ?? ''), '并说清是哪个参数');
+
+    // 快速模式与 JSON 模式是两回事：关掉思考开关不该把 JSON 模式一起关掉
+    aiUseFakeTransport(['ai_provider' => 'mimo', 'ai_fast_mode' => '0']);
+    aiCapturePayload();
+    AiClient::chat([['role' => 'user', 'content' => 'hi']], AiClient::config());
+    assertEquals(false, array_key_exists('thinking', aiSeen()), '关掉快速模式后回到模型自己的思考');
+    assertEquals(['type' => 'json_object'], aiSeen()['response_format'] ?? null, 'JSON 模式照发');
+    aiResetSettings();
+}
+
+/** 拉模型列表同样不许空跑：缺 Key 就当场说清楚，而不是让对方回一个 401 再记进审计 */
+function test_listing_models_says_what_is_missing(): void
+{
+    $called = 0;
+    $spy = static function () use (&$called) {
+        $called++;
+        return ['ok' => true, 'json' => ['data' => [['id' => 'mimo-v2.5']]], 'error' => '', 'status' => 200, 'raw' => ''];
+    };
+
+    aiUseFakeTransport(['ai_provider' => 'mimo', 'ai_model' => '', 'ai_api_key' => '']);
+    AiClient::$transport = $spy;
+    $res = AiClient::listModels();
+    assertTrue(!($res['ok'] ?? true), '没有 Key 时不报告成功');
+    assertContains('缺少 API Key', (string) ($res['error'] ?? ''), '说的是差什么，不是一个远处的 401');
+    assertEquals(0, $called, '一个请求都没发出去');
+
+    // 本地 Ollama 这类不需要 Key 的端点照常可查
+    $called = 0;
+    aiUseFakeTransport(['ai_provider' => 'ollama', 'ai_model' => 'qwen2.5:7b', 'ai_api_key' => '']);
+    AiClient::$transport = $spy;
+    $local = AiClient::listModels();
+    assertTrue((bool) ($local['ok'] ?? false), 'Ollama 不需要 Key');
+    assertEquals(1, $called, '这一次真的去查了');
+    aiResetSettings();
+}
+
 function test_a_thinking_model_that_only_wrote_reasoning_is_not_reported_as_silent(): void
 {
     aiUseFakeTransport(['ai_provider' => 'deepseek']);
@@ -562,6 +669,9 @@ function test_endpoints_are_restricted_to_https_except_localhost(): void
         ['http://localhost:11434/v1', true, ''],
         ['ftp://api.example.com/v1', false, 'http'],
         ['not a url', false, '不完整'],
+        // 存错了值时，错误里必须带着那个值：“接口地址不完整”本身不告诉你是哪里不完整
+        //（实测：“模型”下拉的候选项落到了“接口地址”框里，存成了 mimo-v2.5）
+        ['mimo-v2.5', false, 'mimo-v2.5'],
         ['https://user:pass@api.example.com/v1', false, '用户名/密码'],
     ];
     /** The model answered; the URL shape is asserted in the endpoint tests. */

@@ -245,6 +245,10 @@ class AppMap
                 // what 快速模式 actually sends for this provider (empty = no such switch)
                 'fast'      => !empty($p['fast_params']) ? json_encode($p['fast_params'],
                     JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : '',
+                // 服务商之间的参数名与能力差异：设置页/文档都从这一份取，不手写第二份
+                'max_key'   => (string) ($p['max_tokens_key'] ?? 'max_tokens'),
+                'json_mode' => !empty($p['json_mode']),
+                'note'      => (string) ($p['note'] ?? ''),
             ];
         }
         return $out;
@@ -387,7 +391,7 @@ class AppMap
                     '明细行本身也可搜索（search_records 的 order_item 面）：像“哪个商品卖得最多”这类聚合问句，只能把 order_items 整表取回来自己按 product_name / subtotal 汇总；明细没有自己的归属人，所以 writable 恒为 false —— 要改明细就走父记录（set_order_items 改订单）',
                     '上下文窗口：Ai::historyDigest() 把同一账号在 ai_context_minutes 窗口内的历史请求（指令、AI 的回答、状态、涉及的真实编号）作为 <history> 一并送进模型，于是“刚才那条线索”“上次那个客户”能接得上；数据源就是审计表 ai_actions 本身，不另存副本，所以不会有“审计说删了两条、上下文说删了三条”这种第二真相；窗口 0 表示关闭，上限 7 天（越长越慢），体积有硬上限（10 条 / 1500 字），超出就省略最老的并提示用 search_records(tables:ai_request, days/from/to) 主动查更早的。上下文只按 user_id 过滤，别人发起的请求绝不出现；用户说“刚才/上次/这条”而没给编号时，Ai::contextReferenceBlock() 在服务端把指代钉成窗口内最近的真实编号并附上“不要再反问用户要编号”（实测模型会看到了编号却不敢用），窗口关掉时该块为空、绝不凭空猜编号',
                     '一句“确认”也接得上：上一轮只提问没出计划时，Ai::carryForwardIntent() 会把那轮的指令原文与当时提到的真实编号（编号常只出现在它的回答里）作为 <continuation> 带进本轮，规则 18 禁止再问“你想确认什么”；已有 pending 计划则不续接（该点页面上的确认执行按钮），窗口关闭时也不续接，提示词规则 17 同时要求“要用户拍板就必须把动作写进 actions”——只提问等于把负担推回给用户',
-                    '拼写差一个字母不算查无此人：精确检索落空时 Ai::fuzzyMatches() 用 levenshtein + similar_text 给出“疑似 ashmad ＝客户 CUS-000020（Ahmad）”，并明确标注是近似而非确证；只对 4 个字母以上的英文词做（实测 ashmad/ahmat/ivna/mohammd 都能命中，zzzzzzz 不命中），中文一律不模糊匹配（否则误伤太大）',                    'AI 的可写字段不是手写清单，而是 Ai::fieldsFor() 读表结构生成，提示词、参数校验、真正落库三处同源：库里加一列 AI 就能写一列。上一版手写的参数表漏了 source_country 等列，于是出现「线索没有来源国家字段」这种根本不存在的拒绝。系统自维护的列（编号 public_code、单号 order_number、created_at/updated_at、stage_*_at / lost_at / archived_at、跟进人 user_id）在 Ai::PROTECTED_COLUMNS 里排除；改 status / stage / archived 时由系统连带写对应时间戳，与人工操作同一套语义；可空列传空字符串即清空，NOT NULL 且无默认值的列拒绝清空',
+                    '拼写差一个字母不算查无此人：精确检索落空时 Ai::fuzzyMatches() 用 levenshtein + similar_text 给出“疑似 ashmad ＝客户 CUS-000020（Ahmad）”，并明确标注是近似而非确证；只对 4 个字母以上的英文词做（实测 ashmad/ahmat/ivna/mohammd 都能命中，zzzzzzz 不命中），中文一律不模糊匹配（否则误伤太大）',                    'AI 的可写字段不是手写清单，而是 Ai::fieldsFor() 读表结构生成，提示词、参数校验、真正落库三处同源：库里加一列 AI 就能写一列。上一版手写的参数表漏了 source_country 等列，于是出现「线索没有来源国家字段」这种根本不存在的拒绝。系统自维护的列（编号 public_code、单号 order_number、created_at/updated_at、stage_*_at / lost_at / archived_at、跟进人 user_id）在 Ai::PROTECTED_COLUMNS 里排除；改 status / stage / archived 时由系统连带写对应时间戳，与人工操作同一套语义；可空列传空字符串即清空，NOT NULL 且无默认值的列拒绝清空。时间列（leads.lead_time 线索时间、customers.conversion_time 转化时间）按 :datetime 而不是一般文本交给模型，值统一经 appDateTime() 换算成上海时间的 Y-m-d H:i:s；新建线索没给 lead_time 时由 Ai::kindInfo() 的 defaults 落当前上海时间（真实报障：AI 会建线索却从不填线索时间，详情页那一栏永远空）',
                     '国家筛选是等值 OR，不是模糊匹配：Ai::countryGroups() 把一种说法展开成该国全部写法 —— 库里 source_country 中英混写（印度、埃及、伊拉克 与 United States 并存），单向映射会查出 0 条模型就开始猜；而用 LIKE 模糊匹配又会把印度尼西亚当成印度，批量删除时就是误删',
                     'AI 能删自己的历史：delete_ai_request 只能删自己发起的记录（admin 可删任意），但不能删“正在执行的这一条”，避免执行完就把自己的审计链抹掉',
                 ],
@@ -444,8 +448,10 @@ class AppMap
             ],
             [
                 'title' => '⚠ 时间戳两种时区混存',
-                'body'  => 'schema 的 DEFAULT/TRIGGER 用 SQLite datetime(\'now\')，那是 UTC；而 PHP 侧 date(\'Y-m-d H:i:s\')（lost_at、conversion_time、archived_at、stage_*_at、users.updated_at…）写的是 '
-                    . $php['timezone'] . '，与 UTC 相差 ' . (int) $php['utc_offset'] . ' 小时。列表/详情用 formatDate() 直接按字面量解析，不做时区换算 —— 所以同一行里 created_at 与 lost_at 可能差 8 小时，别把它当数据错乱。统一成一个时区（建议全存 UTC、显示时换算）是个待办。',
+                'body'  => 'schema 的 DEFAULT/TRIGGER 用 SQLite datetime(\'now\')，那是 UTC；而 PHP 侧写的时间（lost_at、conversion_time、lead_time、archived_at、stage_*_at、users.updated_at…）是上海时间。' .
+                    'PHP 侧这一侧统一走 helpers 里的 appNow() / appDateTime() / appDateTimeLocal()：显式带 Asia/Shanghai，不靠“默认时区凑巧正确”（bootstrap 设了上海，但 CLI、定时任务不然），' .
+                    '入库前不管来自 datetime-local（…T14:30）、带偏移的 ISO还是中文“昨天下午3点半”，全部归一成 Y-m-d H:i:s；回填控件用 appDateTimeLocal() 转回 T 写法，否则 datetime-local 碰到空格写法会显示为空、用户一保存就把时间洗掉了。' .
+                    '与当前 UTC 相差 ' . (int) $php['utc_offset'] . ' 小时。列表/详情用 formatDate() 直接按字面量解析，不做时区换算 —— 所以同一行里 created_at 与 lost_at 可能差 8 小时，别把它当数据错乱。统一成一个时区（建议全存 UTC、显示时换算）仍是个待办。',
             ],
             [
                 'title' => '金额与文案',

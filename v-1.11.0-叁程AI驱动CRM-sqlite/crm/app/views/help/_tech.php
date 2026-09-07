@@ -219,9 +219,16 @@ foreach ($php['extensions'] as $ext => $on) {
             <?php foreach ($map['ai_models'] as $p): ?>
                 <tr>
                     <td><code><?= e($p['key']) ?></code><div class="small text-muted"><?= e($p['label']) ?></div></td>
-                    <td class="small"><code><?= e($p['base'] ?: '（自定义时由你填写）') ?></code><?= $p['needs_key'] ? '<span class="text-danger"> · 需 API Key</span>' : '' ?></td>
+                    <td class="small"><code><?= e($p['base'] ?: '（自定义时由你填写）') ?></code><?= $p['needs_key'] ? '<span class="text-danger"> · 需 API Key</span>' : '' ?>
+                        <?= $p['note'] !== '' ? '<div class="text-muted mt-1">' . e($p['note']) . '</div>' : '' ?></td>
                     <td class="small"><strong><?= e($p['default'] ?: '—') ?></strong><?= $p['models'] ? '；可选：' . e(implode(', ', $p['models'])) : '' ?>
-                        <?= $p['fast'] !== '' ? '<div class="text-muted">快速模式（关掉模型思考）发送：<code>' . e($p['fast']) . '</code></div>' : '<div class="text-muted">无思考开关</div>' ?></td>
+                        <?= $p['fast'] !== '' ? '<div class="text-muted">快速模式（关掉模型思考）发送：<code>' . e($p['fast']) . '</code></div>' : '<div class="text-muted">无思考开关</div>' ?>
+                        <?php if (($p['max_key'] ?? 'max_tokens') !== 'max_tokens'): ?>
+                            <div class="text-muted">输出长度参数名：<code><?= e($p['max_key']) ?></code>（系统自动改名）</div>
+                        <?php endif; ?>
+                        <?php if (!empty($p['json_mode'])): ?>
+                            <div class="text-muted">请求里带 <code>response_format: json_object</code>（由服务端保证回复是合法 JSON）</div>
+                        <?php endif; ?></td>
                 </tr>
             <?php endforeach; ?>
             </tbody>
