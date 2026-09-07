@@ -31,7 +31,7 @@ $l = $old ?? $lead ?? [];
     </div>
     <div class="col-md-4">
         <label class="form-label">线索时间</label>
-        <input type="datetime-local" name="lead_time" class="form-control" value="<?= e($l['lead_time'] ?? '') ?>">
+        <input type="datetime-local" name="lead_time" class="form-control" value="<?= e(appDateTimeLocal($l['lead_time'] ?? '')) ?>">
     </div>
 
     <!-- 社交媒体 & 网站 -->

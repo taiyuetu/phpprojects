@@ -92,9 +92,7 @@ $isLost = ($lead['status'] ?? '') === 'lost';
             <h6 class="text-muted small text-uppercase">跟进信息</h6>
             <p class="mb-1"><i class="bi bi-tag me-2"></i>来源：<?= e($lead['source'] ?: '—') ?></p>
             <p class="mb-1"><i class="bi bi-cash-coin me-2"></i>预估金额：<?= money((float) $lead['value']) ?></p>
-            <?php if (!empty($lead['lead_time'])): ?>
-                <p class="mb-1"><i class="bi bi-hourglass-split me-2"></i>线索时间：<?= e($lead['lead_time']) ?></p>
-            <?php endif; ?>
+            <p class="mb-1"><i class="bi bi-hourglass-split me-2"></i>线索时间：<?= formatDate($lead['lead_time'] ?? '', 'Y-m-d H:i') ?></p>
             <?= ownerBlock($lead['owner_id'] ?? null) ?>
             <?php if ($isLost && !empty($lead['lost_reason'])): ?>
                 <p class="mb-1"><i class="bi bi-x-octagon me-2"></i>流失原因：

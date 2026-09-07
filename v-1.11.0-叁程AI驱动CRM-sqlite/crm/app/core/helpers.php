@@ -270,6 +270,150 @@ function formatDate($date, string $format = 'M j, Y'): string
     return $ts ? date($format, $ts) : '—';
 }
 
+// ------------------------------------------------------------ 时间（上海时区）
+
+/**
+ * 业务时区：整站的「现在」一律按上海时间（UTC+8）算，不跟服务器的 PHP 默认时区走。
+ *
+ * bootstrap.php 里虽然 date_default_timezone_set('Asia/Shanghai')，但 CLI 脚本、定时任务、
+ * 以及默认时区被改动的部署不能靠「环境凑巧正确」——所以凡是要写进库的时间都显式带时区。
+ * 注意库里的时间戳有两套来源：SQLite 的 datetime('now') 写的是 UTC（created_at 这类），
+ * PHP 写的是上海时间（lost_at、conversion_time、lead_time、stage_*_at…）。
+ * 本文件这几个函数只负责后者，并且永远输出 +08:00 的墙上时间。
+ */
+if (!defined('APP_TIMEZONE')) {
+    define('APP_TIMEZONE', 'Asia/Shanghai');
+}
+
+/** 上海时间的「现在」（默认 Y-m-d H:i:s，即 PHP 侧写库的标准格式）。 */
+function appNow(string $format = 'Y-m-d H:i:s'): string
+{
+    return (new DateTimeImmutable('now', new DateTimeZone(APP_TIMEZONE)))->format($format);
+}
+
+/** 中文数字 → int（认不出返回 null）：3 / 十五 / 二十 / 五十九 */
+function appCnNumber(string $s): ?int
+{
+    $s = trim($s);
+    if ($s === '') {
+        return null;
+    }
+    if (ctype_digit($s)) {
+        return (int) $s;
+    }
+    $d = ['零' => 0, '一' => 1, '二' => 2, '两' => 2, '三' => 3,
+          '四' => 4, '五' => 5, '六' => 6, '七' => 7, '八' => 8, '九' => 9];
+    if ($s === '十') {
+        return 10;
+    }
+    if (preg_match('~^十(.)$~u', $s, $m)) {
+        return isset($d[$m[1]]) ? 10 + $d[$m[1]] : null;
+    }
+    if (preg_match('~^(.)?十(.)?$~u', $s, $m)) {
+        $tens = ($m[1] ?? '') === '' ? 1 : ($d[$m[1]] ?? null);
+        $ones = ($m[2] ?? '') === '' ? 0 : ($d[$m[2]] ?? null);
+        return ($tens === null || $ones === null) ? null : $tens * 10 + $ones;
+    }
+    return $d[$s] ?? null;
+}
+
+/**
+ * 任意写法的时间 → 入库标准格式 `Y-m-d H:i:s`（上海时间）；认不出来返回 ''。
+ *
+ * 谁在写时间：页面上的 datetime-local 控件给的是 2026-09-07T14:30，AI 可能给
+ * 2026-09-07 14:30、带时区的 ISO（…Z / +08:00 要换算成上海），也可能照抄用户口中的
+ * 「昨天下午3点半」。历史数据里三种格式都出现过，所以入库前统一过这道门，
+ * 页面回填控件与详情展示才只需面对一种格式。
+ *
+ * 相对日期（今天/下周五/3月5号）复用 Ai::parseDate()，日期类型与时间类型同一套换算。
+ */
+function appDateTime($raw): string
+{
+    $v = trim((string) $raw);
+    if ($v === '' || str_starts_with($v, '0000-00-00')) {
+        return '';
+    }
+    $tz = new DateTimeZone(APP_TIMEZONE);
+
+    // 「刚才/现在」这类此刻语义
+    if (preg_match('~^(刚才|刚刚|方才|现在|此刻|此时|就在刚刚|就在刚才|now)$~iu', $v)) {
+        return appNow();
+    }
+
+    // 1) 纯 ASCII：ISO / 「Y-m-d H:i(:s)」 / 「Y-m-d\TH:i」 / 带时区偏移
+    if (!preg_match('~[^\x00-\x7F]~', $v)) {
+        try {
+            $d = new DateTimeImmutable($v, $tz);      // 自带时区的以自带的为准，没带的按上海解释
+        } catch (Throwable $e) {
+            return '';
+        }
+        return appGuardYear($d->setTimezone($tz)->format('Y-m-d H:i:s'));
+    }
+
+    // 2) 含中文：先摘钟点，剩下的当日期
+    $v = strtr($v, ['今早' => '今天早上', '今晚' => '今天晚上', '今宵' => '今天晚上',
+                    '明早' => '明天早上', '明晚' => '明天晚上', '昨晚' => '昨天晚上',
+                    '昨宵' => '昨天晚上', '后晚' => '后天晚上']);
+    $clock = null;
+    $rest = $v;
+    if (preg_match('~(凌晨|清晨|早上|早晨|上午|中午|正午|下午|午后|傍晚|晚上|夜里|深夜)?\s*'
+                 . '([0-9]{1,2}|[零一二两三四五六七八九十]{1,3})\s*(?:[:：]|点|时)\s*'
+                 . '(?:([0-9]{1,2}|[零一二三四五六七八九十]{1,3})\s*分?|(半))?~u', $rest, $m)) {
+        $hour = appCnNumber($m[2]);
+        $minRaw = (string) ($m[3] ?? '');
+        $minute = ($m[4] ?? '') === '半' ? 30 : ($minRaw === '' ? 0 : appCnNumber($minRaw));
+        if ($hour !== null && $minute !== null) {
+            $period = $m[1] ?? '';
+            if (in_array($period, ['下午', '午后', '傍晚', '晚上', '夜里', '深夜'], true) && $hour < 12) {
+                $hour += 12;                          // 下午3点 = 15
+            } elseif ($period === '凌晨' && $hour === 12) {
+                $hour = 0;
+            } elseif ($period === '中午' && $hour === 1) {
+                $hour = 13;
+            }
+            if ($hour <= 23 && $minute <= 59) {
+                $clock = sprintf('%02d:%02d:00', $hour, $minute);
+                $rest = trim(str_replace($m[0], ' ', $rest));
+            }
+        }
+    }
+
+    // 日期部分：没写就是今天；钟点没写就沿用了此刻的时分秒（中文说法都是相对现在的）
+    $dayStr = appNow('Y-m-d');
+    // 只剩「下午」这种光秃秃的时段词：当今天处理，别拿它去难为日期解析
+    $rest = trim((string) preg_replace('~^(?:凌晨|清晨|早上|早晨|上午|中午|正午|下午|午后|傍晚|晚上|夜里|深夜)+$~u', '', $rest));
+    if ($rest !== '') {
+        $dayTs = class_exists('Ai') ? Ai::parseDate($rest) : strtotime($rest);
+        if ($dayTs === false || $dayTs === -1) {
+            return '';
+        }
+        $dayStr = date('Y-m-d', $dayTs);              // 与 parseDate 同一时区口径往返，不换算
+    }
+    try {
+        $d = new DateTimeImmutable($dayStr . ' ' . ($clock ?? appNow('H:i:s')), $tz);
+    } catch (Throwable $e) {
+        return '';
+    }
+    return appGuardYear($d->format('Y-m-d H:i:s'));
+}
+
+/** 离谱的年份（1970、0000）当没解析出来：宁缺不错 */
+function appGuardYear(string $std): string
+{
+    if ($std === '') {
+        return '';
+    }
+    $y = (int) substr($std, 0, 4);
+    return ($y < 1990 || $y > 2100) ? '' : $std;
+}
+
+/** 库里的时间 → <input type="datetime-local"> 认得的 2026-09-07T14:30；空/非法返回 ''。 */
+function appDateTimeLocal($raw): string
+{
+    $std = appDateTime($raw);
+    return $std === '' ? '' : str_replace(' ', 'T', substr($std, 0, 16));
+}
+
 /** Ensure a CSRF token exists in the session and return it (for use in views). */
 function csrf(): string
 {

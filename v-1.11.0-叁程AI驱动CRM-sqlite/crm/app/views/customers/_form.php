@@ -55,7 +55,7 @@ $c = $old ?? $customer ?? [];
     </div>
     <div class="col-md-4">
         <label class="form-label">客户新建/转化时间</label>
-        <input type="datetime-local" name="conversion_time" class="form-control" value="<?= e($c['conversion_time'] ?? '') ?>">
+        <input type="datetime-local" name="conversion_time" class="form-control" value="<?= e(appDateTimeLocal($c['conversion_time'] ?? '')) ?>">
     </div>
     <div class="col-12">
         <label class="form-label">收货地址</label>

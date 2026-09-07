@@ -235,7 +235,10 @@ class Fields
         $maxlength = (int) ($form['maxlength'] ?? 0);
         $rows = max(2, (int) ($form['rows'] ?? 3));
         $val = is_array($value) ? ($value[$name] ?? null) : $value;
-        $valStr = e($val === null ? '' : (string) $val);
+        // datetime-local 只认 2026-09-07T14:30；库里存的是上海时间的 Y-m-d H:i:s，回填前先换一下
+        $valStr = $type === 'datetime'
+            ? e(appDateTimeLocal($val))
+            : e($val === null ? '' : (string) $val);
         $reqAttr = $required ? ' required' : '';
         $phAttr = $placeholder !== '' ? ' placeholder="' . e($placeholder) . '"' : '';
         $maxAttr = $maxlength > 0 ? ' maxlength="' . $maxlength . '"' : '';
@@ -405,6 +408,19 @@ class Fields
                     $data[$name] = $s;
                     if (!empty($meta['emailValidate']) && !filter_var($s, FILTER_VALIDATE_EMAIL)) {
                         $errors[] = '请输入有效的邮箱地址。';
+                    }
+                    break;
+
+                case 'datetime':
+                    // 页面上的 datetime-local 交来 2026-09-07T14:30，AI 与历史数据里还有另一种写法。
+                    // 统一落上海时间的 Y-m-d H:i:s，否则回填控件碰到带空格的写法会显示为空，
+                    // 用户只是改个手机号就把这个字段静怎怎清掉了。
+                    $std = appDateTime($s);
+                    if ($std === '') {
+                        $errors[] = $label . '无法识别，请按「2026-09-07 14:30」填写。';
+                        $data[$name] = $s;
+                    } else {
+                        $data[$name] = $std;
                     }
                     break;
 
